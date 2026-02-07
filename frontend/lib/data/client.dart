@@ -258,7 +258,7 @@ class ApiClient {
 
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('$baseUrl/upload_image'),
+      Uri.parse('$baseUrl/ocr/ocr_to_entry'),
     );
 
     // Add headers

@@ -89,6 +89,14 @@ class Budget(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utc_now)
     updated_at: datetime = Field(default_factory=_utc_now)
 
+class Token(SQLModel, table=True):
+    __tablename__ = "tokens"
+
+    token: str = Field(primary_key=True)
+    user_id: str = Field(index=True)
+    expires_at: datetime
+    created_at: datetime = Field(default_factory=_utc_now)
+
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
 
@@ -132,6 +140,43 @@ def user_to_json(u: User) -> dict[str, Any]:
         "budgetGoal": u.budget_goal,
         "isOnboarded": u.is_onboarded,
     }
+
+# ----------------------------
+# Token helpers
+# ----------------------------
+
+def add_token(token: str, user_id: str, expires_at: datetime) -> Token:
+    """Create a new authentication token"""
+    with Session(engine) as session:
+        t = Token(token=token, user_id=user_id, expires_at=_ensure_tz(expires_at))
+        session.add(t)
+        session.commit()
+        session.refresh(t)
+        return t
+
+def get_token(token: str) -> Optional[Token]:
+    """Get token by token string"""
+    with Session(engine) as session:
+        statement = select(Token).where(Token.token == token)
+        return session.exec(statement).first()
+
+def delete_token(token: str) -> None:
+    """Delete a token (logout)"""
+    with Session(engine) as session:
+        statement = select(Token).where(Token.token == token)
+        t = session.exec(statement).first()
+        if t:
+            session.delete(t)
+            session.commit()
+
+def delete_expired_tokens() -> None:
+    """Clean up expired tokens"""
+    with Session(engine) as session:
+        statement = select(Token).where(Token.expires_at < _utc_now())
+        expired = session.exec(statement).all()
+        for t in expired:
+            session.delete(t)
+        session.commit()
 
 # ----------------------------
 # CRUD helpers
@@ -424,6 +469,7 @@ def seed_database() -> None:
         print("Clearing existing data...")
         session.query(Expense).delete()
         session.query(Budget).delete()
+        session.query(Token).delete()
         session.query(User).delete()
         session.commit()
 
@@ -462,6 +508,23 @@ def seed_database() -> None:
 
         session.add(user1)
         session.add(user2)
+        session.commit()
+
+        # Create tokens for users (expires in 30 days)
+        token1 = Token(
+            token="demo_token_user1_12345",
+            user_id="user1",
+            expires_at=now + timedelta(days=30),
+        )
+        
+        token2 = Token(
+            token="demo_token_user2_67890",
+            user_id="user2",
+            expires_at=now + timedelta(days=30),
+        )
+
+        session.add(token1)
+        session.add(token2)
         session.commit()
 
         # Create sample expenses for user1
@@ -569,5 +632,5 @@ def seed_database() -> None:
         session.commit()
 
         print("✅ Database seeded successfully!")
-        print(f"   Created 2 users, 6 expenses, 4 budgets")
+        print(f"   Created 2 users, 2 tokens, 6 expenses, 4 budgets")
 

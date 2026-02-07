@@ -22,8 +22,6 @@ app.register_blueprint(ocr_bp, url_prefix="/api/ocr")
 # register blueprints
 app.register_blueprint(speech_bp, url_prefix="/api/speech")
 
-# Simple in-memory token store (use Redis/DB in production)
-_tokens = {}
 
 def _hash_password(password: str) -> str:
     """Hash password with salt"""
@@ -48,23 +46,27 @@ def _generate_token() -> str:
 
 def _verify_token(token: str) -> tuple[bool, str | None]:
     """Verify token and return (is_valid, user_id)"""
-    if token in _tokens:
-        user_id, expires = _tokens[token]
-        if datetime.utcnow() < expires:
-            return True, user_id
+    token_record = db.get_token(token)
+    if token_record:
+        if datetime.utcnow() < token_record.expires_at.replace(tzinfo=None):
+            return True, token_record.user_id
         else:
-            del _tokens[token]
+            # Token expired, delete it
+            db.delete_token(token)
     return False, None
 
 
 def _get_auth_user():
     """Get authenticated user from request header"""
     auth_header = request.headers.get('Authorization', '')
+    print(auth_header)
     if not auth_header.startswith('Bearer '):
         return None
     
     token = auth_header[7:]
+    print(f"Extracted token: {token}")
     is_valid, user_id = _verify_token(token)
+    print(f"Token valid: {is_valid}, User ID: {user_id}")
     if not is_valid:
         return None
     
@@ -99,9 +101,10 @@ def register():
     password_hash = _hash_password(password)
     user = db.add_user(username=username, password_hash=password_hash)
     
-    # Generate token
+    # Generate token and store in database
     token = _generate_token()
-    _tokens[token] = (user.id, datetime.utcnow() + timedelta(days=30))
+    expires_at = datetime.utcnow() + timedelta(days=30)
+    db.add_token(token=token, user_id=user.id, expires_at=expires_at)
     
     return jsonify({
         "token": token,
@@ -125,9 +128,10 @@ def login():
     if not user or not _verify_password(password, user.password_hash):
         return jsonify({"message": "Invalid credentials"}), 401
     
-    # Generate token
+    # Generate token and store in database
     token = _generate_token()
-    _tokens[token] = (user.id, datetime.utcnow() + timedelta(days=30))
+    expires_at = datetime.utcnow() + timedelta(days=30)
+    db.add_token(token=token, user_id=user.id, expires_at=expires_at)
     
     return jsonify({
         "token": token,

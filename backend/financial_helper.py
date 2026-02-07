@@ -8,7 +8,7 @@ from typing import Any, Optional, Literal
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-import db
+from . import database as db
 
 from .database import (
     Budget,

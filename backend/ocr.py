@@ -11,7 +11,6 @@ from . import utils
 from . import constants
 from . import database as db
 from . import financial_helper as fin
-from . import main as m
 
 ocr_bp = Blueprint('ocr', __name__)
 load_dotenv()
@@ -146,9 +145,16 @@ def ocr_to_entry():
         # 1. Run OCR pipeline
         items = process_receipt_file(filepath)
 
+        print("add to db")
         # 2. Add to DB
-        user_id = m._get_auth_user()
-        
+        from .main import _get_auth_user
+        user = _get_auth_user()
+        print(user)
+        if not user:
+            return jsonify({"error": "Unauthorized"}), 401
+        user_id = user.id
+        print("added to db")
+
         date_str = request.form.get("date")
         if date_str:
             try:
