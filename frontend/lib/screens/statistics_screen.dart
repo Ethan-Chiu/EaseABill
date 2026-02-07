@@ -19,11 +19,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   List<FlSpot> _weeklyData = [];
   List<String> _weekLabels = [];
   String? _error;
+  int _currentStreak = 0;
+  bool _isLoadingStreak = false;
 
   @override
   void initState() {
     super.initState();
     _loadWeeklyData();
+    _loadStreak();
   }
 
   Future<void> _loadWeeklyData() async {
@@ -61,6 +64,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _error = e.toString();
         _isLoadingWeekly = false;
       });
+    }
+  }
+
+  Future<void> _loadStreak() async {
+    setState(() => _isLoadingStreak = true);
+    try {
+      final data = await _client.getUserStreak();
+      setState(() {
+        _currentStreak = data['streak'] ?? 0;
+        _isLoadingStreak = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingStreak = false);
     }
   }
 
@@ -102,7 +118,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildTotalSpendingCard(context, service),
+                IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      Expanded(child: _buildTotalSpendingCard(context, service)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildStreakCard(context)),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 24),
                 Text(
                   'Weekly Spending Trend',
@@ -145,6 +169,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text(
               'Total Spending',
@@ -154,17 +179,72 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              '\$${service.totalSpending.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '\$${service.totalSpending.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
             const SizedBox(height: 8),
             Text(
               '${service.expenses.length} transactions',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStreakCard(BuildContext context) {
+    return Card(
+      color: Colors.orange.shade600,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Current Streak',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.white70,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _isLoadingStreak
+                ? const CircularProgressIndicator(color: Colors.white)
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        '$_currentStreak',
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        '🔥',
+                        style: TextStyle(fontSize: 28),
+                      ),
+                    ],
+                  ),
+            const SizedBox(height: 8),
+            Text(
+              _currentStreak == 1 ? 'day' : 'days',
               style: const TextStyle(
                 fontSize: 14,
                 color: Colors.white70,
