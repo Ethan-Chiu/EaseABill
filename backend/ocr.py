@@ -192,7 +192,23 @@ def ocr_to_entry():
         
         if user_id:
             db.get_user_by_id(user_id)
-            budget_status = fin.evaluate_all_budget_goals(user_id=user_id)[0]
+            budget_statuses = fin.evaluate_all_budget_goals(user_id=user_id)
+            
+            # Save all budget statuses to database
+            for status in budget_statuses:
+                db.add_budget_status(
+                    user_id=user_id,
+                    goal_type=status.get("goalType", "BUDGET"),
+                    status=status.get("status", ""),
+                    should_notify=status.get("status") in ("WARNING", "OVERSPENT"),
+                    message=status.get("message", ""),
+                    data=status.get("data", {}),
+                )
+            
+            # Return the first status for the response
+            budget_status = budget_statuses[0] if budget_statuses else {}
+        else:
+            budget_status = {}
 
         return jsonify({
             "message": "Successfully scanned and saved expenses",

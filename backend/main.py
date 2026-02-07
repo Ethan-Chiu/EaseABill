@@ -221,6 +221,20 @@ def create_expense():
             description=data.get('description'),
             user_id=user.id,
         )
+        
+        # Evaluate budget goals and save to database
+        budget_alerts = fh.evaluate_on_new_expense(user_id=user.id, expense=expense)
+        for alert in budget_alerts:
+            # Extract data from alert
+            db.add_budget_status(
+                user_id=user.id,
+                goal_type=alert.get("goalType", "BUDGET"),
+                status=alert.get("status", ""),
+                should_notify=alert.get("status") in ("WARNING", "OVERSPENT"),
+                message=alert.get("message", ""),
+                data=alert.get("data", {}),
+            )
+        
         return jsonify(db.expense_to_json(expense)), 201
     except Exception as e:
         return jsonify({"message": f"Failed to create expense: {str(e)}"}), 500
@@ -469,6 +483,25 @@ def stats_weekly():
         category=category,
     )
     return jsonify(data), 200
+
+
+@app.route("/api/notifications", methods=["GET"])
+def get_notifications():
+    """Get all budget status notifications for user on a specific date"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    date_str = request.args.get("date")  # optional, format: YYYY-MM-DD
+    date = None
+    if date_str:
+        try:
+            date = datetime.fromisoformat(date_str).replace(tzinfo=None)
+        except ValueError:
+            return jsonify({"message": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    statuses = db.list_budget_statuses(user_id=user.id, date=date)
+    return jsonify([db.budget_status_to_json(bs) for bs in statuses]), 200
 
 
 @app.errorhandler(Exception)

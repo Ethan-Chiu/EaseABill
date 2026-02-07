@@ -437,6 +437,23 @@ class ApiClient {
     );
     return _handleResponse(response);
   }
+
+  // ==================== Notification Endpoints ====================
+
+  /// Get all budget status notifications for a user on a specific date
+  Future<List<Map<String, dynamic>>> getNotifications({DateTime? date}) async {
+    var uri = Uri.parse('$baseUrl/notifications');
+    
+    if (date != null) {
+      final dateStr = '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      uri = uri.replace(queryParameters: {'date': dateStr});
+    }
+    
+    _logRequest('GET', uri);
+    final response = await http.get(uri, headers: _headers);
+    final data = _handleResponse(response) as List;
+    return data.cast<Map<String, dynamic>>();
+  }
 }
 
 // Custom exception for API errors

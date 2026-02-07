@@ -5,6 +5,7 @@ import '../data/service/expense_service.dart';
 import '../data/model/expense.dart';
 import '../data/model/category.dart';
 import 'add_expense_screen.dart';
+import 'notifications_screen.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -23,6 +24,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            tooltip: 'Budget Notifications',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationsScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.filter_list),
             onPressed: _showFilterDialog,

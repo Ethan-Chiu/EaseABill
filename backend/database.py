@@ -6,7 +6,7 @@ from typing import Any, Optional, Literal
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field, Session, create_engine, select
-from sqlalchemy import func
+from sqlalchemy import func, JSON
 
 Period = Literal["weekly", "monthly", "yearly"]
 
@@ -97,6 +97,18 @@ class Token(SQLModel, table=True):
     expires_at: datetime
     created_at: datetime = Field(default_factory=_utc_now)
 
+class BudgetStatus(SQLModel, table=True):
+    __tablename__ = "budget_statuses"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: str = Field(index=True)
+    goal_type: str  # "BUDGET"
+    status: str  # "ON_TRACK", "WARNING", "OVERSPENT"
+    should_notify: bool
+    message: str
+    data: dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
+    timestamp: datetime = Field(default_factory=_utc_now, index=True)
+
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
 
@@ -177,6 +189,75 @@ def delete_expired_tokens() -> None:
         for t in expired:
             session.delete(t)
         session.commit()
+
+# ----------------------------
+# Budget Status helpers
+# ----------------------------
+
+def add_budget_status(
+    *,
+    user_id: str,
+    goal_type: str,
+    status: str,
+    should_notify: bool,
+    message: str,
+    data: dict[str, Any],
+) -> BudgetStatus:
+    """Create a new budget status notification"""
+    bs = BudgetStatus(
+        user_id=user_id,
+        goal_type=goal_type,
+        status=status,
+        should_notify=should_notify,
+        message=message,
+        data=data,
+        timestamp=_utc_now(),
+    )
+    with Session(engine) as session:
+        session.add(bs)
+        session.commit()
+        session.refresh(bs)
+        return bs
+
+
+def list_budget_statuses(
+    *,
+    user_id: str,
+    date: Optional[datetime] = None,
+) -> list[BudgetStatus]:
+    """Get all budget statuses for a user on a specific date (default today)"""
+    if date is None:
+        date = _utc_now()
+    
+    # Get start and end of day in UTC
+    start_of_day = _ensure_tz(date).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = start_of_day.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    stmt = (
+        select(BudgetStatus)
+        .where(
+            BudgetStatus.user_id == user_id,
+            BudgetStatus.timestamp >= start_of_day,
+            BudgetStatus.timestamp <= end_of_day,
+        )
+        .order_by(BudgetStatus.timestamp.desc())
+    )
+    
+    with Session(engine) as session:
+        return list(session.exec(stmt).all())
+
+
+def budget_status_to_json(bs: BudgetStatus) -> dict[str, Any]:
+    """Convert BudgetStatus to JSON"""
+    return {
+        "id": str(bs.id),
+        "goalType": bs.goal_type,
+        "status": bs.status,
+        "shouldNotify": bs.should_notify,
+        "message": bs.message,
+        "data": bs.data,
+        "timestamp": _ensure_tz(bs.timestamp).isoformat(),
+    }
 
 # ----------------------------
 # CRUD helpers
