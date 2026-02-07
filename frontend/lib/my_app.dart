@@ -12,12 +12,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use the same ApiClient instance for all services
+    // Get the singleton ApiClient instance
     final apiClient = ApiClient();
 
     return MultiProvider(
       providers: [
-        // Provide ApiClient as a singleton
+        // Provide ApiClient singleton
         Provider<ApiClient>.value(value: apiClient),
         ChangeNotifierProvider(
           create: (_) => AuthService(apiClient),

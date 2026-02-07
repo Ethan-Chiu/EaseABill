@@ -26,8 +26,13 @@ class AuthService extends ChangeNotifier {
       _token = prefs.getString('auth_token');
       final userJson = prefs.getString('current_user');
 
+      if (kDebugMode) {
+        print('DEBUG: Initializing auth - token exists: $_token != null');
+      }
+
       if (_token != null && userJson != null) {
         _client.setAuthToken(_token!);
+        if (kDebugMode) print('DEBUG: Token restored and set on ApiClient');
         // Optionally verify token with server
         // For now, just restore from local storage
       }

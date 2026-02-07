@@ -176,4 +176,8 @@ def get_expenses():
 # Initialize database
 if __name__ == "__main__":
     db.init_db()
+    # Only seed if SEED_DB environment variable is set to "true"
+    import os
+    if os.getenv("SEED_DB", "").lower() == "true":
+        db.seed_database()
     app.run(debug=True, host='0.0.0.0', port=8000)

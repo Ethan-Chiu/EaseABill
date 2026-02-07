@@ -6,12 +6,17 @@ import 'model/expense.dart';
 import 'model/budget.dart';
 
 class ApiClient {
+  static final ApiClient _instance = ApiClient._internal();
+
   final String baseUrl;
   String? _authToken;
 
-  ApiClient({
-    String? baseUrl,
-  }) : baseUrl = baseUrl ?? _defaultBaseUrl();
+  ApiClient._internal({String? baseUrl})
+      : baseUrl = baseUrl ?? _defaultBaseUrl();
+
+  factory ApiClient() {
+    return _instance;
+  }
 
   static String _defaultBaseUrl() {
     String url = Environment().config.baseUrl;
@@ -38,9 +43,6 @@ class ApiClient {
     };
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
-      print('DEBUG: Adding Authorization header with token');
-    } else {
-      print('DEBUG: _authToken is null, no Authorization header will be added');
     }
     return headers;
   }
@@ -363,7 +365,6 @@ class ApiClient {
     double? budgetGoal,
     bool? isOnboarded,
   }) async {
-    print('DEBUG: updateUserProfile called, _authToken = $_authToken');
     final response = await http.put(
       Uri.parse('$baseUrl/user/profile'),
       headers: _headers,

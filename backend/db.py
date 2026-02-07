@@ -411,3 +411,163 @@ def budget_spent(*, user_id: str, budget: Budget) -> float:
     )
 
 
+# ----------------------------
+# Seed Data
+# ----------------------------
+
+def seed_database() -> None:
+    """
+    Clear the database and populate with sample data.
+    """
+    with Session(engine) as session:
+        # Clear existing data
+        print("Clearing existing data...")
+        session.query(Expense).delete()
+        session.query(Budget).delete()
+        session.query(User).delete()
+        session.commit()
+
+        # Create sample users
+        import hashlib
+        import secrets
+        
+        def hash_password(password: str) -> str:
+            salt = secrets.token_hex(8)
+            pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+            return f"{salt}${pwd_hash.hex()}"
+
+        user1 = User(
+            id="user1",
+            username="ethan",
+            password_hash=hash_password("password"),
+            location="San Francisco, USA",
+            latitude=37.7749,
+            longitude=-122.4194,
+            monthly_income=5000.0,
+            budget_goal=1500.0,
+            is_onboarded=True,
+        )
+        
+        user2 = User(
+            id="user2",
+            username="ethan2",
+            password_hash=hash_password("password"),
+            location="New York, USA",
+            latitude=40.7128,
+            longitude=-74.0060,
+            monthly_income=6000.0,
+            budget_goal=2000.0,
+            is_onboarded=True,
+        )
+
+        session.add(user1)
+        session.add(user2)
+        session.commit()
+
+        # Create sample expenses for user1
+        now = _utc_now()
+        from datetime import timedelta
+        
+        expenses = [
+            Expense(
+                title="Groceries",
+                amount=120.50,
+                category="Food & Dining",
+                date=now - timedelta(days=2),
+                description="Weekly groceries",
+                user_id="user1",
+            ),
+            Expense(
+                title="Gas",
+                amount=50.00,
+                category="Transportation",
+                date=now - timedelta(days=3),
+                description="Car fuel",
+                user_id="user1",
+            ),
+            Expense(
+                title="Netflix Subscription",
+                amount=15.99,
+                category="Entertainment",
+                date=now - timedelta(days=5),
+                description="Monthly subscription",
+                user_id="user1",
+            ),
+            Expense(
+                title="Restaurant Dinner",
+                amount=85.75,
+                category="Food & Dining",
+                date=now - timedelta(days=1),
+                description="Dinner with friends",
+                user_id="user1",
+            ),
+            Expense(
+                title="Gym Membership",
+                amount=50.00,
+                category="Health & Fitness",
+                date=now - timedelta(days=7),
+                description="Monthly gym",
+                user_id="user1",
+            ),
+            Expense(
+                title="Online Shopping",
+                amount=75.00,
+                category="Shopping",
+                date=now - timedelta(days=4),
+                description="Clothes and accessories",
+                user_id="user1",
+            ),
+        ]
+
+        for expense in expenses:
+            session.add(expense)
+        
+        session.commit()
+
+        # Create sample budgets for user1
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_end = (month_start + timedelta(days=31)).replace(day=1) - timedelta(seconds=1)
+
+        budgets = [
+            Budget(
+                category="Food & Dining",
+                limit=600.0,
+                period="monthly",
+                start_date=month_start,
+                end_date=month_end,
+                user_id="user1",
+            ),
+            Budget(
+                category="Transportation",
+                limit=300.0,
+                period="monthly",
+                start_date=month_start,
+                end_date=month_end,
+                user_id="user1",
+            ),
+            Budget(
+                category="Entertainment",
+                limit=200.0,
+                period="monthly",
+                start_date=month_start,
+                end_date=month_end,
+                user_id="user1",
+            ),
+            Budget(
+                category="Health & Fitness",
+                limit=150.0,
+                period="monthly",
+                start_date=month_start,
+                end_date=month_end,
+                user_id="user1",
+            ),
+        ]
+
+        for budget in budgets:
+            session.add(budget)
+        
+        session.commit()
+
+        print("✅ Database seeded successfully!")
+        print(f"   Created 2 users, 6 expenses, 4 budgets")
+
