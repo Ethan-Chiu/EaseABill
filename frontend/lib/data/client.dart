@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'model/expense.dart';
@@ -32,6 +33,14 @@ class ApiClient {
     final headers = {
       'Content-Type': 'application/json',
     };
+    if (_authToken != null) {
+      headers['Authorization'] = 'Bearer $_authToken';
+    }
+    return headers;
+  }
+
+  Map<String, String> get _multipartHeaders {
+    final headers = <String, String>{};
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
     }
@@ -265,6 +274,45 @@ class ApiClient {
   // Helper method to read file
   Future<File> _readFile(String filePath) async {
     return File(filePath);
+  }
+
+  /// Upload audio recording for server-side processing
+  Future<Map<String, dynamic>> uploadAudioRecording(String audioPath) async {
+    final file = await _readFile(audioPath);
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/upload-audio'),
+    );
+
+    _multipartHeaders.forEach((key, value) {
+      request.headers[key] = value;
+    });
+
+    request.files.add(
+      http.MultipartFile(
+        'file',
+        file.openRead(),
+        file.lengthSync(),
+        filename: _getFileName(audioPath),
+      ),
+    );
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (responseBody.isEmpty) return {};
+      return json.decode(responseBody);
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: responseBody.isNotEmpty
+            ? json.decode(responseBody)['message'] ??
+                'Failed to upload audio'
+            : 'Failed to upload audio',
+      );
+    }
   }
 
   // Helper method to extract filename from path

@@ -220,4 +220,20 @@ class ExpenseService extends ChangeNotifier {
       _setLoading(false);
     }
   }
+
+  /// Upload audio recording for server-side processing
+  Future<Map<String, dynamic>> uploadAudioRecording(String audioPath) async {
+    _setLoading(true);
+    try {
+      final result = await _client.uploadAudioRecording(audioPath);
+      _error = null;
+      return result;
+    } catch (e) {
+      _error = e.toString();
+      if (kDebugMode) print('Error uploading audio: $e');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
 }

@@ -51,5 +51,7 @@
 	<string>Allow access to the camera to capture receipt images.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Allow access to the microphone to record receipt videos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Allow access to the microphone to record receipt videos.</string>
 </dict>
 </plist>

@@ -5,6 +5,7 @@ import 'expenses_screen.dart';
 import 'budgets_screen.dart';
 import 'statistics_screen.dart';
 import 'add_expense_screen.dart';
+import '../components/voice_record_button.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -62,16 +63,50 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: _onItemTapped,
       ),
       floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AddExpenseScreen(),
-                  ),
-                );
-              },
-              child: const Icon(Icons.add),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                VoiceRecordButton(
+                  onAudioRecorded: (audioPath) async {
+                    final service = context.read<ExpenseService>();
+                    try {
+                      // print debug message
+                      print('Uploading audio recording: $audioPath');
+
+                      await service.uploadAudioRecording(audioPath);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Audio sent for processing.'),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error sending audio: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton(
+                  heroTag: 'add_expense_button',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AddExpenseScreen(),
+                      ),
+                    );
+                  },
+                  child: const Icon(Icons.add),
+                ),
+              ],
             )
           : null,
     );
