@@ -161,7 +161,7 @@ def health_check():
     return jsonify({"status": "ok"}), 200
 
 
-# ==================== Expense Endpoints (TODO) ====================
+# ==================== Expense Endpoints ====================
 
 @app.route("/api/expenses", methods=["GET"])
 def get_expenses():
@@ -172,6 +172,99 @@ def get_expenses():
     expenses = db.list_expenses(user_id=user.id)
     return jsonify([db.expense_to_json(e) for e in expenses]), 200
 
+
+@app.route("/api/expenses", methods=["POST"])
+def create_expense():
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    data = request.get_json()
+    
+    # Validate required fields
+    if not data.get('title') or data.get('amount') is None or not data.get('category'):
+        return jsonify({"message": "Missing required fields: title, amount, category"}), 400
+    
+    try:
+        expense = db.add_expense(
+            title=data.get('title'),
+            amount=float(data.get('amount')),
+            category=data.get('category'),
+            date=data.get('date') or db._utc_now().isoformat(),
+            description=data.get('description'),
+            user_id=user.id,
+        )
+        return jsonify(db.expense_to_json(expense)), 201
+    except Exception as e:
+        return jsonify({"message": f"Failed to create expense: {str(e)}"}), 500
+
+
+@app.route("/api/expenses/<expense_id>", methods=["GET"])
+def get_expense(expense_id):
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    from uuid import UUID
+    try:
+        expense = db.get_expense(UUID(expense_id))
+        if not expense or expense.user_id != user.id:
+            return jsonify({"message": "Expense not found"}), 404
+        return jsonify(db.expense_to_json(expense)), 200
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
+
+
+@app.route("/api/expenses/<expense_id>", methods=["PUT"])
+def update_expense(expense_id):
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    from uuid import UUID
+    data = request.get_json()
+    
+    try:
+        expense = db.update_expense(
+            UUID(expense_id),
+            title=data.get('title'),
+            amount=float(data.get('amount')) if data.get('amount') is not None else None,
+            category=data.get('category'),
+            date=data.get('date'),
+            description=data.get('description'),
+        )
+        if not expense or expense.user_id != user.id:
+            return jsonify({"message": "Expense not found"}), 404
+        return jsonify(db.expense_to_json(expense)), 200
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
+
+
+@app.route("/api/expenses/<expense_id>", methods=["DELETE"])
+def delete_expense(expense_id):
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    from uuid import UUID
+    try:
+        expense = db.get_expense(UUID(expense_id))
+        if not expense or expense.user_id != user.id:
+            return jsonify({"message": "Expense not found"}), 404
+        
+        db.delete_expense(UUID(expense_id))
+        return jsonify({"message": "Expense deleted"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    response = {
+        "message": "An unexpected error occurred.",
+        "details": str(e) if app.debug else None,
+    }
+    return jsonify(response), 500
 
 # Initialize database
 if __name__ == "__main__":
