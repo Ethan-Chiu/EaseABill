@@ -1,11 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../data/service/expense_service.dart';
 import '../data/model/category.dart';
+import '../data/client.dart';
 
-class StatisticsScreen extends StatelessWidget {
+class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
+
+  @override
+  State<StatisticsScreen> createState() => _StatisticsScreenState();
+}
+
+class _StatisticsScreenState extends State<StatisticsScreen> {
+  final ApiClient _client = ApiClient();
+  bool _isLoadingWeekly = false;
+  List<FlSpot> _weeklyData = [];
+  List<String> _weekLabels = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWeeklyData();
+  }
+
+  Future<void> _loadWeeklyData() async {
+    setState(() {
+      _isLoadingWeekly = true;
+      _error = null;
+    });
+
+    try {
+      final data = await _client.getStatsWeekly(weeks: 8);
+      final points = data['points'] as List;
+      
+      final spots = <FlSpot>[];
+      final labels = <String>[];
+      
+      for (var i = 0; i < points.length; i++) {
+        final point = points[i];
+        final xValue = point['x'] as String;
+        final yValue = (point['y'] as num).toDouble();
+        
+        spots.add(FlSpot(i.toDouble(), yValue));
+        
+        // Parse date and format as MM/DD
+        final date = DateTime.parse(xValue);
+        labels.add(DateFormat('M/d').format(date));
+      }
+
+      setState(() {
+        _weeklyData = spots;
+        _weekLabels = labels;
+        _isLoadingWeekly = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoadingWeekly = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +103,13 @@ class StatisticsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildTotalSpendingCard(context, service),
+                const SizedBox(height: 24),
+                Text(
+                  'Weekly Spending Trend',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                _buildWeeklyLineChart(context),
                 const SizedBox(height: 24),
                 Text(
                   'Spending by Category',
@@ -98,6 +162,167 @@ class StatisticsScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildWeeklyLineChart(BuildContext context) {
+    if (_isLoadingWeekly) {
+      return const SizedBox(
+        height: 250,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+              const SizedBox(height: 8),
+              Text('Failed to load chart data'),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _loadWeeklyData,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_weeklyData.isEmpty) {
+      return const SizedBox(
+        height: 250,
+        child: Center(child: Text('No data available')),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          height: 250,
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: true,
+                horizontalInterval: _calculateInterval(),
+                getDrawingHorizontalLine: (value) {
+                  return FlLine(
+                    color: Colors.grey[300]!,
+                    strokeWidth: 1,
+                  );
+                },
+                getDrawingVerticalLine: (value) {
+                  return FlLine(
+                    color: Colors.grey[300]!,
+                    strokeWidth: 1,
+                  );
+                },
+              ),
+              titlesData: FlTitlesData(
+                show: true,
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 30,
+                    interval: 1,
+                    getTitlesWidget: (value, meta) {
+                      final index = value.toInt();
+                      if (index >= 0 && index < _weekLabels.length) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            _weekLabels[index],
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 10,
+                            ),
+                          ),
+                        );
+                      }
+                      return const Text('');
+                    },
+                  ),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: _calculateInterval(),
+                    reservedSize: 42,
+                    getTitlesWidget: (value, meta) {
+                      return Text(
+                        '\$${value.toInt()}',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 10,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              borderData: FlBorderData(
+                show: true,
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              minX: 0,
+              maxX: (_weeklyData.length - 1).toDouble(),
+              minY: 0,
+              maxY: _calculateMaxY(),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: _weeklyData,
+                  isCurved: true,
+                  color: Theme.of(context).primaryColor,
+                  barWidth: 3,
+                  isStrokeCapRound: true,
+                  dotData: FlDotData(
+                    show: true,
+                    getDotPainter: (spot, percent, barData, index) {
+                      return FlDotCirclePainter(
+                        radius: 4,
+                        color: Theme.of(context).primaryColor,
+                        strokeWidth: 2,
+                        strokeColor: Colors.white,
+                      );
+                    },
+                  ),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _calculateMaxY() {
+    if (_weeklyData.isEmpty) return 100;
+    final maxValue = _weeklyData.map((e) => e.y).reduce((a, b) => a > b ? a : b);
+    return (maxValue * 1.2).ceilToDouble();
+  }
+
+  double _calculateInterval() {
+    final maxY = _calculateMaxY();
+    if (maxY <= 50) return 10;
+    if (maxY <= 100) return 20;
+    if (maxY <= 500) return 100;
+    return 200;
   }
 
   Widget _buildCategoryChart(BuildContext context, ExpenseService service) {

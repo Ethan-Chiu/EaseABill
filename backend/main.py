@@ -5,6 +5,7 @@ import hashlib
 import secrets
 from . import database as db
 from . import financial_helper as fh
+from . import stats_helper
 from .ocr import ocr_bp
 from .speech import speech_bp
 
@@ -165,6 +166,7 @@ def update_profile():
     if updated_user.budget_goal is not None and updated_user.budget_goal > 0:
         start_date, end_date = fh.window_for_period("monthly")
         db.add_budget(
+            category="Overall",
             limit=float(updated_user.budget_goal),
             period="monthly",
             start_date=start_date,
@@ -281,6 +283,192 @@ def delete_expense(expense_id):
         return jsonify({"message": "Expense deleted"}), 200
     except Exception as e:
         return jsonify({"message": f"Error: {str(e)}"}), 500
+
+
+# ==================== Budget Endpoints ====================
+
+@app.route("/api/budgets", methods=["GET"])
+def get_budgets():
+    """Get all budgets for the authenticated user"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    # Get active_only query param (default: false)
+    active_only = request.args.get('active_only', 'false').lower() == 'true'
+    
+    budgets = db.list_budgets(user_id=user.id, active_only=active_only)
+    
+    # Calculate spent for each budget
+    result = []
+    for budget in budgets:
+        spent = db.budget_spent(user_id=user.id, budget=budget)
+        result.append(db.budget_to_json(budget, spent=spent))
+    
+    return jsonify(result), 200
+
+
+@app.route("/api/budgets", methods=["POST"])
+def create_budget():
+    """Create a new budget"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['category', 'limit', 'period', 'startDate', 'endDate']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"message": f"Missing required field: {field}"}), 400
+    
+    try:
+        from datetime import datetime
+        
+        start_date = datetime.fromisoformat(data['startDate'].replace('Z', '+00:00'))
+        end_date = datetime.fromisoformat(data['endDate'].replace('Z', '+00:00'))
+        
+        budget = db.add_budget(
+            category=data['category'],
+            limit=float(data['limit']),
+            period=data['period'],
+            start_date=start_date,
+            end_date=end_date,
+            user_id=user.id,
+        )
+        
+        spent = db.budget_spent(user_id=user.id, budget=budget)
+        return jsonify(db.budget_to_json(budget, spent=spent)), 201
+    except Exception as e:
+        return jsonify({"message": f"Failed to create budget: {str(e)}"}), 500
+
+
+@app.route("/api/budgets/<budget_id>", methods=["GET"])
+def get_budget(budget_id):
+    """Get a single budget by ID"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    from uuid import UUID
+    try:
+        budget = db.get_budget(UUID(budget_id))
+        if not budget or budget.user_id != user.id:
+            return jsonify({"message": "Budget not found"}), 404
+        
+        spent = db.budget_spent(user_id=user.id, budget=budget)
+        return jsonify(db.budget_to_json(budget, spent=spent)), 200
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
+
+
+@app.route("/api/budgets/<budget_id>", methods=["PUT"])
+def update_budget(budget_id):
+    """Update an existing budget"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    from uuid import UUID
+    data = request.get_json()
+    
+    try:
+        from datetime import datetime
+        
+        # Parse dates if provided
+        start_date = None
+        end_date = None
+        if 'startDate' in data:
+            start_date = datetime.fromisoformat(data['startDate'].replace('Z', '+00:00'))
+        if 'endDate' in data:
+            end_date = datetime.fromisoformat(data['endDate'].replace('Z', '+00:00'))
+        
+        budget = db.update_budget(
+            UUID(budget_id),
+            user_id=user.id,
+            category=data.get('category'),
+            limit=float(data['limit']) if 'limit' in data else None,
+            period=data.get('period'),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        
+        if not budget:
+            return jsonify({"message": "Budget not found"}), 404
+        
+        spent = db.budget_spent(user_id=user.id, budget=budget)
+        return jsonify(db.budget_to_json(budget, spent=spent)), 200
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
+
+
+@app.route("/api/budgets/<budget_id>", methods=["DELETE"])
+def delete_budget(budget_id):
+    """Delete a budget"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    from uuid import UUID
+    try:
+        success = db.delete_budget(UUID(budget_id), user_id=user.id)
+        if not success:
+            return jsonify({"message": "Budget not found"}), 404
+        
+        return jsonify({"message": "Budget deleted"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
+
+
+# ==================== Statistics Endpoints ====================
+
+@app.route("/api/stats/pie", methods=["GET"])
+def stats_pie():
+    """Get pie chart data for spending by category"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    # Parse optional date parameters
+    start_str = request.args.get("start")
+    end_str = request.args.get("end")
+    top_n = int(request.args.get("topN", "5"))
+    include_other = request.args.get("includeOther", "true").lower() == "true"
+    
+    start = None
+    end = None
+    if start_str:
+        start = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+    if end_str:
+        end = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+    
+    data = stats_helper.pie_expense_by_category(
+        user_id=user.id,
+        start=start,
+        end=end,
+        top_n=top_n,
+        include_other=include_other,
+    )
+    return jsonify(data), 200
+
+
+@app.route("/api/stats/weekly", methods=["GET"])
+def stats_weekly():
+    """Get weekly spending series for line chart"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    weeks = int(request.args.get("weeks", "8"))
+    category = request.args.get("category")  # optional
+    
+    data = stats_helper.weekly_spend_series(
+        user_id=user.id,
+        weeks=weeks,
+        category=category,
+    )
+    return jsonify(data), 200
 
 
 @app.errorhandler(Exception)

@@ -247,6 +247,50 @@ class ApiClient {
     return data.map((key, value) => MapEntry(key, (value as num).toDouble()));
   }
 
+  /// Get pie chart data for spending by category
+  Future<Map<String, dynamic>> getStatsPie({
+    DateTime? start,
+    DateTime? end,
+    int topN = 5,
+    bool includeOther = true,
+  }) async {
+    var uri = Uri.parse('$baseUrl/stats/pie');
+    final queryParams = <String, String>{
+      'topN': topN.toString(),
+      'includeOther': includeOther.toString(),
+    };
+
+    if (start != null) {
+      queryParams['start'] = start.toIso8601String();
+    }
+    if (end != null) {
+      queryParams['end'] = end.toIso8601String();
+    }
+
+    uri = uri.replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: _headers);
+    return _handleResponse(response) as Map<String, dynamic>;
+  }
+
+  /// Get weekly spending series for line chart
+  Future<Map<String, dynamic>> getStatsWeekly({
+    int weeks = 8,
+    String? category,
+  }) async {
+    var uri = Uri.parse('$baseUrl/stats/weekly');
+    final queryParams = <String, String>{
+      'weeks': weeks.toString(),
+    };
+
+    if (category != null) {
+      queryParams['category'] = category;
+    }
+
+    uri = uri.replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: _headers);
+    return _handleResponse(response) as Map<String, dynamic>;
+  }
+
   // ==================== OCR & Receipt Endpoints ====================
 
   /// Upload receipt image for OCR processing
