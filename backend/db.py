@@ -1,17 +1,28 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional, Literal
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field, Session, create_engine, select
+from sqlalchemy import func
 
+Period = Literal["weekly", "monthly", "yearly"]
 
 def _env(key: str, default: str) -> str:
     v = os.getenv(key)
     return v if v else default
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _ensure_tz(dt: datetime) -> datetime:
+    # 讓所有寫進 DB 的 datetime 都是 tz-aware（配合 TIMESTAMPTZ）
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 def get_engine():
     host = _env("DB_HOST", "localhost") #testing in local
@@ -44,13 +55,55 @@ class Expense(SQLModel, table=True):
     description: Optional[str] = None
     user_id: Optional[str] = Field(default=None, index=True)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=_utc_now)
 
+class Budget(SQLModel, table=True):
+    __tablename__ = "budgets"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    category: str
+    limit: float
+    period: str  # "weekly" | "monthly" | "yearly"
+    start_date: datetime  # timestamptz
+    end_date: datetime    # timestamptz
+    user_id: Optional[str] = Field(default=None, index=True)
+
+    created_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=_utc_now)
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
 
+
+
+# ----------------------------
+# JSON serializers (match Flutter keys)
+# ----------------------------
+def expense_to_json(e: Expense) -> dict[str, Any]:
+    return {
+        "id": str(e.id),
+        "title": e.title,
+        "amount": float(e.amount),
+        "category": e.category,
+        "date": _ensure_tz(e.date).isoformat(),
+        "description": e.description,
+        "userId": e.user_id,
+    }
+
+
+def budget_to_json(b: Budget, *, spent: float = 0.0) -> dict[str, Any]:
+    # spent 通常是「算出來」的，預設 0；分析層可傳入實際 spent
+    return {
+        "id": str(b.id),
+        "category": b.category,
+        "limit": float(b.limit),
+        "spent": float(spent),
+        "period": b.period,
+        "startDate": _ensure_tz(b.start_date).isoformat(),
+        "endDate": _ensure_tz(b.end_date).isoformat(),
+        "userId": b.user_id,
+    }
 
 # ----------------------------
 # CRUD helpers
@@ -136,3 +189,127 @@ def delete_expense(expense_id: UUID) -> bool:
         session.delete(e)
         session.commit()
         return True
+
+
+# ----------------------------
+# Budget CRUD
+# ----------------------------
+def add_budget(
+    *,
+    category: str,
+    limit: float,
+    period: Period,
+    start_date: datetime,
+    end_date: datetime,
+    user_id: Optional[str] = None,
+) -> Budget:
+    b = Budget(
+        category=category,
+        limit=float(limit),
+        period=period,
+        start_date=_ensure_tz(start_date),
+        end_date=_ensure_tz(end_date),
+        user_id=user_id,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+    with Session(engine) as session:
+        session.add(b)
+        session.commit()
+        session.refresh(b)
+        return b
+
+
+def get_budget(budget_id: UUID) -> Optional[Budget]:
+    with Session(engine) as session:
+        return session.get(Budget, budget_id)
+
+
+def list_budgets(*, user_id: str, active_only: bool = False, now: Optional[datetime] = None) -> list[Budget]:
+    stmt = select(Budget).where(Budget.user_id == user_id).order_by(Budget.start_date.desc())
+    if active_only:
+        now = _ensure_tz(now or _utc_now())
+        stmt = stmt.where(Budget.start_date <= now, Budget.end_date > now)
+
+    with Session(engine) as session:
+        return list(session.exec(stmt).all())
+
+
+def update_budget(
+    budget_id: UUID,
+    *,
+    user_id: str,
+    category: Optional[str] = None,
+    limit: Optional[float] = None,
+    period: Optional[Period] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> Optional[Budget]:
+    with Session(engine) as session:
+        b = session.get(Budget, budget_id)
+        if b is None or b.user_id != user_id:
+            return None
+
+        if category is not None:
+            b.category = category
+        if limit is not None:
+            b.limit = float(limit)
+        if period is not None:
+            b.period = period
+        if start_date is not None:
+            b.start_date = _ensure_tz(start_date)
+        if end_date is not None:
+            b.end_date = _ensure_tz(end_date)
+
+        b.updated_at = _utc_now()
+        session.add(b)
+        session.commit()
+        session.refresh(b)
+        return b
+
+
+def delete_budget(budget_id: UUID, *, user_id: str) -> bool:
+    with Session(engine) as session:
+        b = session.get(Budget, budget_id)
+        if b is None or b.user_id != user_id:
+            return False
+        session.delete(b)
+        session.commit()
+        return True
+
+
+# ----------------------------
+# Query helpers (DB-layer aggregations)
+# ----------------------------
+def sum_expenses(
+    *,
+    user_id: str,
+    start: datetime,
+    end: datetime,
+    category: Optional[str] = None,
+) -> float:
+    start = _ensure_tz(start)
+    end = _ensure_tz(end)
+
+    stmt = select(func.coalesce(func.sum(Expense.amount), 0.0)).where(
+        Expense.user_id == user_id,
+        Expense.date >= start,
+        Expense.date < end,
+    )
+    if category is not None:
+        stmt = stmt.where(Expense.category == category)
+
+    with Session(engine) as session:
+        v = session.exec(stmt).one()
+        return float(v or 0.0)
+
+
+def budget_spent(*, user_id: str, budget: Budget) -> float:
+    return sum_expenses(
+        user_id=user_id,
+        start=budget.start_date,
+        end=budget.end_date,
+        category=budget.category,
+    )
+
+
