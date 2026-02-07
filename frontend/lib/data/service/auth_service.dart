@@ -85,6 +85,8 @@ class AuthService extends ChangeNotifier {
   /// Update user profile (onboarding data)
   Future<bool> updateProfile({
     String? location,
+    double? latitude,
+    double? longitude,
     double? monthlyIncome,
     double? budgetGoal,
   }) async {
@@ -92,6 +94,8 @@ class AuthService extends ChangeNotifier {
     try {
       final response = await _client.updateUserProfile(
         location: location,
+        latitude: latitude,
+        longitude: longitude,
         monthlyIncome: monthlyIncome,
         budgetGoal: budgetGoal,
         isOnboarded: true,

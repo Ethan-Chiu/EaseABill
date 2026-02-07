@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../data/service/auth_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -16,6 +18,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _locationController = TextEditingController();
   final _incomeController = TextEditingController();
   final _budgetGoalController = TextEditingController();
+  
+  double? _selectedLatitude;
+  double? _selectedLongitude;
+  bool _isLoadingLocation = false;
 
   @override
   void dispose() {
@@ -41,6 +47,97 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
+    
+    try {
+      // Check location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Location permissions are denied'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permissions are permanently denied'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get current position
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      
+      _selectedLatitude = position.latitude;
+      _selectedLongitude = position.longitude;
+
+      // Reverse geocode to get address
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        final locationText = '${place.locality ?? ''}, ${place.country ?? ''}'
+            .replaceAll(RegExp(r'^,\s*|,\s*$'), '');
+        _locationController.text = locationText;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location detected successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to get location: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoadingLocation = false);
+    }
+  }
+
+  Future<void> _searchLocation(String query) async {
+    if (query.isEmpty) return;
+    
+    try {
+      final locations = await locationFromAddress(query);
+      if (locations.isNotEmpty) {
+        _selectedLatitude = locations.first.latitude;
+        _selectedLongitude = locations.first.longitude;
+      }
+    } catch (e) {
+      // Search failed, but we can still save the text
+      debugPrint('Location search failed: $e');
     }
   }
 
@@ -72,6 +169,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     final success = await authService.updateProfile(
       location: _locationController.text.trim(),
+      latitude: _selectedLatitude,
+      longitude: _selectedLongitude,
       monthlyIncome: income,
       budgetGoal: budgetGoal,
     );
@@ -170,10 +269,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildLocationPage() {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Icon(
             Icons.location_on,
@@ -199,6 +298,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 32),
           TextField(
             controller: _locationController,
+            onChanged: (value) {
+              // Debounce search location
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (_locationController.text == value) {
+                  _searchLocation(value);
+                }
+              });
+            },
             decoration: const InputDecoration(
               labelText: 'City, Country',
               prefixIcon: Icon(Icons.place),
@@ -206,6 +313,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               hintText: 'e.g., San Francisco, USA',
             ),
           ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: _isLoadingLocation ? null : _getCurrentLocation,
+            icon: _isLoadingLocation
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+            label: Text(_isLoadingLocation
+                ? 'Getting location...'
+                : 'Use Current Location'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            ),
+          ),
+          if (_selectedLatitude != null && _selectedLongitude != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'Coordinates: ${_selectedLatitude!.toStringAsFixed(4)}, ${_selectedLongitude!.toStringAsFixed(4)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.green[700],
+                    ),
+              ),
+            ),
         ],
       ),
     );

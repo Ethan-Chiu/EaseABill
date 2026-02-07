@@ -53,5 +53,9 @@
 	<string>Allow access to the microphone to record receipt videos.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Allow access to the microphone to record receipt videos.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Allow access to your location to provide personalized budgeting insights.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Allow access to your location to provide personalized budgeting insights.</string>
 </dict>
 </plist>

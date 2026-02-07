@@ -353,6 +353,8 @@ class ApiClient {
   /// Update user profile
   Future<Map<String, dynamic>> updateUserProfile({
     String? location,
+    double? latitude,
+    double? longitude,
     double? monthlyIncome,
     double? budgetGoal,
     bool? isOnboarded,
@@ -362,6 +364,8 @@ class ApiClient {
       headers: _headers,
       body: json.encode({
         if (location != null) 'location': location,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
         if (monthlyIncome != null) 'monthlyIncome': monthlyIncome,
         if (budgetGoal != null) 'budgetGoal': budgetGoal,
         if (isOnboarded != null) 'isOnboarded': isOnboarded,
