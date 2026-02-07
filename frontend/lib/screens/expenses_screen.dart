@@ -272,7 +272,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               decoration: const InputDecoration(labelText: 'Category'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('All')),

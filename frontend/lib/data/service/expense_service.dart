@@ -202,4 +202,22 @@ class ExpenseService extends ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  // ==================== OCR & Receipt Methods ====================
+
+  /// Upload receipt image for OCR processing
+  Future<Map<String, dynamic>> uploadReceiptImage(String imagePath) async {
+    _setLoading(true);
+    try {
+      final result = await _client.uploadReceiptImage(imagePath);
+      _error = null;
+      return result;
+    } catch (e) {
+      _error = e.toString();
+      if (kDebugMode) print('Error uploading receipt: $e');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
 }

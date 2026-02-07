@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../data/service/expense_service.dart';
 import '../data/model/expense.dart';
 import '../data/model/category.dart';
+import 'camera_scanner_screen.dart';
 
 class AddExpenseScreen extends StatefulWidget {
   final Expense? expense;
@@ -22,6 +23,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String _selectedCategory = ExpenseCategory.defaultCategories.first.name;
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
+  String? _receiptImagePath;
+  bool _isUploadingReceipt = false;
 
   @override
   void initState() {
@@ -97,6 +100,63 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
   }
 
+  Future<void> _launchCameraScanner() async {
+    final imagePath = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => const CameraScannerScreen(),
+      ),
+    );
+
+    if (imagePath != null) {
+      await _uploadReceiptImage(imagePath);
+    }
+  }
+
+  Future<void> _uploadReceiptImage(String imagePath) async {
+    setState(() => _isUploadingReceipt = true);
+
+    try {
+      final service = context.read<ExpenseService>();
+      final result = await service.uploadReceiptImage(imagePath);
+
+      setState(() {
+        _receiptImagePath = imagePath;
+        _isUploadingReceipt = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Receipt uploaded successfully for OCR processing'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        // Optionally pre-fill form with OCR data if available
+        if (result['extractedData'] != null) {
+          final data = result['extractedData'];
+          if (data['amount'] != null) {
+            _amountController.text = data['amount'].toString();
+          }
+          if (data['merchant'] != null) {
+            _titleController.text = data['merchant'];
+          }
+        }
+      }
+    } catch (e) {
+      setState(() => _isUploadingReceipt = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading receipt: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,7 +206,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               decoration: const InputDecoration(
                 labelText: 'Category',
                 border: OutlineInputBorder(),
@@ -200,6 +260,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               ),
               maxLines: 3,
             ),
+            const SizedBox(height: 24),
+            _buildReceiptSection(),
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: _isLoading ? null : _saveExpense,
@@ -219,4 +281,81 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       ),
     );
   }
+
+  Widget _buildReceiptSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Receipt Scan (Optional)',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 12),
+        if (_receiptImagePath != null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Receipt uploaded for OCR',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Processing receipt image...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () {
+                      setState(() => _receiptImagePath = null);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ElevatedButton.icon(
+            onPressed: _isUploadingReceipt ? null : _launchCameraScanner,
+            icon: _isUploadingReceipt
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.camera_alt),
+            label: Text(
+              _isUploadingReceipt ? 'Uploading Receipt...' : 'Scan Receipt',
+            ),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Text(
+          'Capture a receipt photo for automatic expense details extraction',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+}
 }

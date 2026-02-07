@@ -84,7 +84,7 @@ class BudgetsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedCategory,
+                initialValue: selectedCategory,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: ExpenseCategory.defaultCategories.map((category) {
                   return DropdownMenuItem(
@@ -114,7 +114,7 @@ class BudgetsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: selectedPeriod,
+                initialValue: selectedPeriod,
                 decoration: const InputDecoration(labelText: 'Period'),
                 items: const [
                   DropdownMenuItem(value: 'weekly', child: Text('Weekly')),

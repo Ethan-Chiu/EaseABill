@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'model/expense.dart';
 import 'model/budget.dart';
@@ -8,8 +9,18 @@ class ApiClient {
   String? _authToken;
 
   ApiClient({
-    this.baseUrl = 'http://localhost:8000/api', // Update with your server URL
-  });
+    String? baseUrl,
+  }) : baseUrl = baseUrl ?? _defaultBaseUrl();
+
+  static String _defaultBaseUrl() {
+    const override = String.fromEnvironment('API_BASE_URL');
+    if (override.isNotEmpty) return override;
+
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:8000/api';
+    }
+    return 'http://localhost:8000/api';
+  }
 
   // Set authentication token
   void setAuthToken(String token) {
@@ -200,6 +211,65 @@ class ApiClient {
     );
     final data = _handleResponse(response) as Map<String, dynamic>;
     return data.map((key, value) => MapEntry(key, (value as num).toDouble()));
+  }
+
+  // ==================== OCR & Receipt Endpoints ====================
+
+  /// Upload receipt image for OCR processing
+  Future<Map<String, dynamic>> uploadReceiptImage(
+    String imagePath, {
+    String? expenseId,
+  }) async {
+    final file = await _readFile(imagePath);
+    
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/ocr/process-receipt'),
+    );
+
+    // Add headers
+    _headers.forEach((key, value) {
+      request.headers[key] = value;
+    });
+
+    // Add file
+    request.files.add(
+      http.MultipartFile(
+        'receipt',
+        file.openRead(),
+        file.lengthSync(),
+        filename: _getFileName(imagePath),
+      ),
+    );
+
+    // Add optional parameters
+    if (expenseId != null) {
+      request.fields['expenseId'] = expenseId;
+    }
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return json.decode(responseBody);
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: responseBody.isNotEmpty
+            ? json.decode(responseBody)['message'] ?? 'Failed to process receipt'
+            : 'Failed to upload receipt image',
+      );
+    }
+  }
+
+  // Helper method to read file
+  Future<File> _readFile(String filePath) async {
+    return File(filePath);
+  }
+
+  // Helper method to extract filename from path
+  String _getFileName(String path) {
+    return path.split('/').last;
   }
 }
 
