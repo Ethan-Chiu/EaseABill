@@ -38,9 +38,7 @@ class ApiClient {
 
   // Get headers with authentication
   Map<String, String> get _headers {
-    final headers = {
-      'Content-Type': 'application/json',
-    };
+    final headers = {'Content-Type': 'application/json'};
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
     }
@@ -292,7 +290,8 @@ class ApiClient {
       throw ApiException(
         statusCode: response.statusCode,
         message: responseBody.isNotEmpty
-            ? json.decode(responseBody)['message'] ?? 'Failed to process receipt'
+            ? json.decode(responseBody)['message'] ??
+                  'Failed to process receipt'
             : 'Failed to upload receipt image',
       );
     }
@@ -335,8 +334,7 @@ class ApiClient {
       throw ApiException(
         statusCode: response.statusCode,
         message: responseBody.isNotEmpty
-            ? json.decode(responseBody)['message'] ??
-                'Failed to upload audio'
+            ? json.decode(responseBody)['message'] ?? 'Failed to upload audio'
             : 'Failed to upload audio',
       );
     }
@@ -354,23 +352,20 @@ class ApiClient {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'username': username,
-        'password': password,
-      }),
+      body: json.encode({'username': username, 'password': password}),
     );
     return _handleResponse(response);
   }
 
   /// Register new user
-  Future<Map<String, dynamic>> register(String username, String password) async {
+  Future<Map<String, dynamic>> register(
+    String username,
+    String password,
+  ) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/register'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'username': username,
-        'password': password,
-      }),
+      body: json.encode({'username': username, 'password': password}),
     );
     return _handleResponse(response);
   }
@@ -405,10 +400,7 @@ class ApiException implements Exception {
   final int statusCode;
   final String message;
 
-  ApiException({
-    required this.statusCode,
-    required this.message,
-  });
+  ApiException({required this.statusCode, required this.message});
 
   @override
   String toString() => 'ApiException: $message (Status: $statusCode)';

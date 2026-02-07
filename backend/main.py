@@ -2,17 +2,17 @@ from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 import hashlib
 import secrets
-import db
-
-from speech import speech_bp
+from . import database as db
+from .ocr import ocr_bp
+from .speech import speech_bp
 
 app = Flask(__name__)
+app.register_blueprint(ocr_bp)
+# register blueprints
+app.register_blueprint(speech_bp, url_prefix="/api/speech")
 
 # Simple in-memory token store (use Redis/DB in production)
 _tokens = {}
-
-# register blueprints
-app.register_blueprint(speech_bp, url_prefix="/api/speech")
 
 def _hash_password(password: str) -> str:
     """Hash password with salt"""
@@ -149,7 +149,6 @@ def update_profile():
     return jsonify(db.user_to_json(updated_user)), 200
 
 
-# ==================== Health Check ====================
 
 @app.route("/")
 def hello_world():

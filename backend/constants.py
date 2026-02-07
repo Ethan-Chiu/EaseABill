@@ -16,4 +16,5 @@ EXPENSE_CATEGORIES = [
     "Travel",
     "Education",
     "Gifts & Donations",
+	"Grocery",
 ]

@@ -5,8 +5,8 @@ import requests
 import os
 import json
 
-import utils
-import constants
+from . import utils
+from . import constants
 
 # make a blueprints
 speech_bp = blueprints.Blueprint("speech", __name__)

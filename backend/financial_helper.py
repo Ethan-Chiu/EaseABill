@@ -2,20 +2,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional, Literal
 
-from uuid import UUID
+from sqlalchemy import func
+from sqlmodel import Session, select
 
-from db import (
+import db
+
+from .database import (
     Budget,
     Expense,
     list_budgets,
     sum_expenses,
     budget_to_json,
+    User,
+    Period
 )
 
-Period = Literal["weekly", "monthly", "yearly"]
 GoalStatus = Literal["ON_TRACK", "WARNING", "OVERSPENT"]
 
 
@@ -332,3 +336,171 @@ def spoken_summary(
         )
 
     return f"This {period}, you spent {s['spent']:.0f}. All budgets are on track."
+
+# ----------------------------
+# Cohort (income bucket) + Region (location) peer comparison
+# ----------------------------
+
+# Minimal buckets; adjust later if you want
+INCOME_BUCKETS = [
+    (0, 2500),
+    (2500, 4000),
+    (4000, 6000),
+    (6000, 9000),
+    (9000, 13000),
+    (13000, 10**18),
+]
+
+
+def income_bucket_label(monthly_income: Optional[float]) -> Optional[str]:
+    if monthly_income is None:
+        return None
+    x = float(monthly_income)
+    for lo, hi in INCOME_BUCKETS:
+        if lo <= x < hi:
+            return f"{lo}+" if hi >= 10**18 else f"{lo}-{hi}"
+    return None
+
+
+def income_bucket_range(label: str) -> tuple[float, float]:
+    # "2500-4000" -> (2500, 4000), "13000+" -> (13000, inf)
+    if label.endswith("+"):
+        return float(label[:-1]), float("inf")
+    lo_s, hi_s = label.split("-")
+    return float(lo_s), float(hi_s)
+
+
+def cohort_region_peer_stats(
+    *,
+    location: str,
+    bucket_label: str,
+    start: datetime,
+    end: datetime,
+    category: Optional[str] = None,
+) -> tuple[float, int]:
+    """
+    Returns (peer_avg_spent, peer_user_count) for users:
+      same location AND monthly_income in same bucket
+    over [start, end).
+    """
+    start = ensure_tz(start)
+    end = ensure_tz(end)
+    lo, hi = income_bucket_range(bucket_label)
+
+    with Session(db.engine) as session:
+        per_user = (
+            select(
+                Expense.user_id,
+                func.coalesce(func.sum(Expense.amount), 0.0).label("user_total"),
+            )
+            .join(User, User.id == Expense.user_id)
+            .where(
+                User.location == location,
+                User.monthly_income.is_not(None),
+                User.monthly_income >= lo,
+                *((User.monthly_income < hi,) if hi != float("inf") else ()),
+                Expense.date >= start,
+                Expense.date < end,
+            )
+            .group_by(Expense.user_id)
+        )
+
+        if category is not None:
+            per_user = per_user.where(Expense.category == category)
+
+        subq = per_user.subquery()
+        avg_stmt = select(
+            func.coalesce(func.avg(subq.c.user_total), 0.0),
+            func.count(subq.c.user_id),
+        )
+
+        avg_val, n_users = session.exec(avg_stmt).one()
+        return float(avg_val or 0.0), int(n_users or 0)
+
+
+def compare_user_to_cohort_in_region(
+    *,
+    user_id: str,
+    period: Period = "monthly",
+    category: Optional[str] = None,
+    now: Optional[datetime] = None,
+    min_peers: int = 1,
+) -> dict[str, Any]:
+    """
+    Compare user spend vs peers in SAME location AND SAME income cohort.
+    """
+    now = ensure_tz(now or utc_now())
+    u = db.get_user_by_id(user_id)
+    if u is None:
+        return {"type": "COHORT_REGION_FEEDBACK", "message": "User not found.", "data": {"userId": user_id}}
+
+    if not u.location:
+        return {
+            "type": "COHORT_REGION_FEEDBACK",
+            "message": "Missing location. Set user.location during onboarding.",
+            "data": {"userId": user_id},
+        }
+
+    bucket = income_bucket_label(u.monthly_income)
+    if bucket is None:
+        return {
+            "type": "COHORT_REGION_FEEDBACK",
+            "message": "Missing monthlyIncome. Set user.monthly_income during onboarding.",
+            "data": {"userId": user_id, "location": u.location},
+        }
+
+    start, end = window_for_period(period, now=now)
+    user_spent = sum_expenses(user_id=user_id, start=start, end=end, category=category)
+
+    peer_avg, peer_users = cohort_region_peer_stats(
+        location=u.location,
+        bucket_label=bucket,
+        start=start,
+        end=end,
+        category=category,
+    )
+
+    delta = float(user_spent) - float(peer_avg)
+    delta_pct = (delta / peer_avg * 100.0) if peer_avg > 0 else 0.0
+
+    cat = f" in {category}" if category else ""
+    cohort_text = f"{u.location}, income {bucket}"
+
+    if peer_users < min_peers:
+        msg = f"Not enough peer data to compare for {cohort_text}{cat} yet."
+    elif peer_avg <= 0:
+        msg = f"Peer average is not available for {cohort_text}{cat} yet."
+    else:
+        if delta_pct >= 15:
+            msg = (
+                f"Compared with peers in {cohort_text}{cat}, you spent ~{delta_pct:.0f}% more "
+                f"({user_spent:.0f} vs avg {peer_avg:.0f}). Consider tightening spend this period."
+            )
+        elif delta_pct <= -15:
+            msg = (
+                f"Compared with peers in {cohort_text}{cat}, you spent ~{abs(delta_pct):.0f}% less "
+                f"({user_spent:.0f} vs avg {peer_avg:.0f}). Nice—consider moving the difference to savings."
+            )
+        else:
+            msg = (
+                f"Compared with peers in {cohort_text}{cat}, your spending is close to average "
+                f"({user_spent:.0f} vs avg {peer_avg:.0f})."
+            )
+
+    return {
+        "type": "COHORT_REGION_FEEDBACK",
+        "message": msg,
+        "data": {
+            "userId": user_id,
+            "location": u.location,
+            "incomeBucket": bucket,
+            "period": period,
+            "category": category,
+            "userSpent": float(user_spent),
+            "peerAvg": float(peer_avg),
+            "peerUsers": int(peer_users),
+            "delta": float(delta),
+            "deltaPercent": float(delta_pct),
+            "window": {"start": start.isoformat(), "end": end.isoformat()},
+        },
+    }
