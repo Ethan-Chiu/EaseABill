@@ -6,6 +6,7 @@ import os
 import json
 
 import utils
+import constants
 
 app = Flask(__name__)
 load_dotenv()
@@ -14,9 +15,10 @@ UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 DETECT_PRODUCT_AND_PRICE_PROMPT = \
-    "Detect the products bought and the prices from the following text, and " \
-    "return the result in a JSON format with a list of items, each containing" \
-    "'product' and 'price' fields: \"{}\""
+    "The categories are: " + ", ".join(constants.EXPENSE_CATEGORIES) + ". " \
+    "Detect the products bought, the prices (in dollars), and the categories from the following text," \
+    "and return the result in a JSON format with a list of items, each containing" \
+    "'product', 'price', and 'category' fields: \"{}\""
 
 # A post request to the /speech endpoint will trigger the speech recognition process
 @app.route("/upload-audio", methods=["POST"])

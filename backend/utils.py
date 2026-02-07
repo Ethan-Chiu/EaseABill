@@ -4,7 +4,6 @@ import os
 def llm_parse_product_price(prompt):
     url = "https://api.dedaluslabs.ai/v1/chat/completions"
 
-    print(type(prompt))
     payload = {
         "model": "openai/gpt-4o-mini",
         "messages": [
