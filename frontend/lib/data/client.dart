@@ -9,9 +9,7 @@ class ApiClient {
   final String baseUrl;
   String? _authToken;
 
-  ApiClient({
-    String? baseUrl,
-  }) : baseUrl = baseUrl ?? _defaultBaseUrl();
+  ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl();
 
   static String _defaultBaseUrl() {
     String url = Environment().config.baseUrl;
@@ -33,9 +31,7 @@ class ApiClient {
 
   // Get headers with authentication
   Map<String, String> get _headers {
-    final headers = {
-      'Content-Type': 'application/json',
-    };
+    final headers = {'Content-Type': 'application/json'};
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
       print('DEBUG: Adding Authorization header with token');
@@ -78,7 +74,7 @@ class ApiClient {
   }) async {
     var uri = Uri.parse('$baseUrl/expenses');
     final queryParams = <String, String>{};
-    
+
     if (startDate != null) {
       queryParams['startDate'] = startDate.toIso8601String();
     }
@@ -201,7 +197,7 @@ class ApiClient {
   }) async {
     var uri = Uri.parse('$baseUrl/statistics/spending-by-category');
     final queryParams = <String, String>{};
-    
+
     if (startDate != null) {
       queryParams['startDate'] = startDate.toIso8601String();
     }
@@ -236,7 +232,7 @@ class ApiClient {
     String? expenseId,
   }) async {
     final file = await _readFile(imagePath);
-    
+
     var request = http.MultipartRequest(
       'POST',
       Uri.parse('$baseUrl/ocr/process-receipt'),
@@ -271,7 +267,8 @@ class ApiClient {
       throw ApiException(
         statusCode: response.statusCode,
         message: responseBody.isNotEmpty
-            ? json.decode(responseBody)['message'] ?? 'Failed to process receipt'
+            ? json.decode(responseBody)['message'] ??
+                  'Failed to process receipt'
             : 'Failed to upload receipt image',
       );
     }
@@ -314,8 +311,7 @@ class ApiClient {
       throw ApiException(
         statusCode: response.statusCode,
         message: responseBody.isNotEmpty
-            ? json.decode(responseBody)['message'] ??
-                'Failed to upload audio'
+            ? json.decode(responseBody)['message'] ?? 'Failed to upload audio'
             : 'Failed to upload audio',
       );
     }
@@ -333,23 +329,20 @@ class ApiClient {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'username': username,
-        'password': password,
-      }),
+      body: json.encode({'username': username, 'password': password}),
     );
     return _handleResponse(response);
   }
 
   /// Register new user
-  Future<Map<String, dynamic>> register(String username, String password) async {
+  Future<Map<String, dynamic>> register(
+    String username,
+    String password,
+  ) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/register'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'username': username,
-        'password': password,
-      }),
+      body: json.encode({'username': username, 'password': password}),
     );
     return _handleResponse(response);
   }
@@ -385,10 +378,7 @@ class ApiException implements Exception {
   final int statusCode;
   final String message;
 
-  ApiException({
-    required this.statusCode,
-    required this.message,
-  });
+  ApiException({required this.statusCode, required this.message});
 
   @override
   String toString() => 'ApiException: $message (Status: $statusCode)';
