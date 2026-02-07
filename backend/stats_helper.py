@@ -6,8 +6,8 @@ from typing import Optional, Any
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-import database as db
-from database import Expense
+import backend.database as db
+from backend.database import Expense
 
 
 def _utc_now() -> datetime:

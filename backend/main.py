@@ -2,9 +2,9 @@ from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 import hashlib
 import secrets
-from . import database as db
-from .ocr import ocr_bp
-from .speech import speech_bp
+from backend import database as db
+from backend.ocr import ocr_bp
+from backend.speech import speech_bp
 
 app = Flask(__name__)
 app.register_blueprint(ocr_bp)

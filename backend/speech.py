@@ -23,14 +23,15 @@ DETECT_PRODUCT_AND_PRICE_PROMPT = \
     "'product', 'price', and 'category' fields: \"{}\""
 
 # A post request to the /speech endpoint will trigger the speech recognition process
-@speech_bp.route("/upload-audio", methods=["POST"])
+@speech_bp.route("/upload_audio", methods=["POST"])
 def upload_audio():
+    print("Received request to /upload_audio")
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
     file = request.files["file"]
 
-    if file.filename == "":
+    if not file.filename:
         return jsonify({"error": "Empty filename"}), 400
 
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)

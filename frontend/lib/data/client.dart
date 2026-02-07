@@ -258,18 +258,18 @@ class ApiClient {
 
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('$baseUrl/ocr/process-receipt'),
+      Uri.parse('$baseUrl/upload_image'),
     );
 
     // Add headers
-    _headers.forEach((key, value) {
+    _multipartHeaders.forEach((key, value) {
       request.headers[key] = value;
     });
 
     // Add file
     request.files.add(
       http.MultipartFile(
-        'receipt',
+        'file',
         file.openRead(),
         file.lengthSync(),
         filename: _getFileName(imagePath),
@@ -308,7 +308,7 @@ class ApiClient {
 
     final request = http.MultipartRequest(
       'POST',
-      Uri.parse('$baseUrl/upload-audio'),
+      Uri.parse('$baseUrl/speech/upload_audio'),
     );
 
     _multipartHeaders.forEach((key, value) {

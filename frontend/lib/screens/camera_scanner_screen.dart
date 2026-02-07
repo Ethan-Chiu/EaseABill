@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:frontend/data/client.dart';
 
 class CameraScannerScreen extends StatefulWidget {
   const CameraScannerScreen({super.key});
@@ -11,8 +12,9 @@ class CameraScannerScreen extends StatefulWidget {
 
 class _CameraScannerScreenState extends State<CameraScannerScreen> {
   final ImagePicker _imagePicker = ImagePicker();
+  final ApiClient _apiClient = ApiClient();
   XFile? _capturedImage;
-  final bool _isLoading = false;
+  bool _isLoading = false;
 
   Future<void> _captureImage() async {
     try {
@@ -62,6 +64,33 @@ class _CameraScannerScreenState extends State<CameraScannerScreen> {
     }
   }
 
+  Future<void> _sendImageToApi(String imagePath) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await _apiClient.uploadReceiptImage(imagePath);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload successful: ${response['message'] ?? 'Receipt processed'}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   void _confirmAndSend() {
     if (_capturedImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -70,8 +99,8 @@ class _CameraScannerScreenState extends State<CameraScannerScreen> {
       return;
     }
 
-    // Return the image path to the previous screen
-    Navigator.of(context).pop(_capturedImage!.path);
+    // Send the image to the API
+    _sendImageToApi(_capturedImage!.path);
   }
 
   void _retakeImage() {

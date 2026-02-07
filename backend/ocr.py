@@ -22,14 +22,18 @@ DETECT_PRODUCT_AND_PRICE_PROMPT = \
     "'product', 'price', and 'category' fields: \"{}\""
 
 
-@ocr_bp.route("/upload-image", methods=["POST"])
+@ocr_bp.route("/api/upload_image", methods=["POST"])
 def upload_image():
+    print("Received request to /upload_image")
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
+    
+    print("File found in request")
 
     file = request.files["file"]
+    print(f"Received file: {file.filename}, content type: {file.content_type}")
 
-    if file.filename == "":
+    if not file.filename:
         return jsonify({"error": "Empty filename"}), 400
 
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
