@@ -4,9 +4,11 @@ from dotenv import load_dotenv
 import requests
 import os
 import json
+import datetime
 
 from . import utils
 from . import constants
+from . import database as db
 
 # make a blueprints
 speech_bp = blueprints.Blueprint("speech", __name__)
@@ -26,6 +28,28 @@ DETECT_PRODUCT_AND_PRICE_PROMPT = \
 @speech_bp.route("/upload_audio", methods=["POST"])
 def upload_audio():
     print("Received request to /upload_audio")
+    # documentation
+    """
+    Upload an audio file for speech recognition. The audio will be transcribed using Dedalus Labs' API,
+    and the transcript will be parsed to extract product names, prices, and categories. The extracted
+    information will be stored as expenses in the database.
+    Expected form data:
+        - user_id: the ID of the user uploading the audio
+        - file: the audio file to be uploaded (e.g., .mp3, .wav)
+    Response:
+    {
+        "message": "Success",
+        "path": "path/to/uploaded/file",
+        "items": [
+            {
+                "product": "coffee",
+                "price": 4.0,
+                "category": "Food & Dining"
+            },
+            ...
+        ]
+    }
+    """
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -52,5 +76,14 @@ def upload_audio():
 
     llm_response = utils.llm_parse_product_price(DETECT_PRODUCT_AND_PRICE_PROMPT.format(response.text))
     parsed = json.loads(llm_response.get("choices", [{}])[0].get("message", {}).get("content", ""))
+
+    for expense in parsed.get("items", []):
+        e = db.add_expense(
+            user_id=request.form.get("user_id"),
+            title=expense["product"],
+            amount=expense["price"],
+            category=expense["category"],
+            date=datetime.datetime.now()
+        )
 
     return jsonify({"message": "Success", "path": filepath, "items": parsed["items"]}), 201

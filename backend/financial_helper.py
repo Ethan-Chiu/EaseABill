@@ -20,6 +20,8 @@ from .database import (
     Period
 )
 
+from .utils import llm_roast_budget
+
 GoalStatus = Literal["ON_TRACK", "WARNING", "OVERSPENT"]
 
 
@@ -149,6 +151,9 @@ def evaluate_budget_goal(
             status = "ON_TRACK"
             should_notify = False
             msg = f"{budget.category}: on track ({percent_used:.0f}% used). Remaining {remaining:.2f}."
+
+
+    msg = llm_roast_budget(msg).get("choices", [{}])[0].get("message", {}).get("content", "").strip() or msg
 
     payload = {
         "goalType": "BUDGET",
@@ -486,6 +491,8 @@ def compare_user_to_cohort_in_region(
                 f"Compared with peers in {cohort_text}{cat}, your spending is close to average "
                 f"({user_spent:.0f} vs avg {peer_avg:.0f})."
             )
+
+    msg = llm_roast_budget(msg).get("choices", [{}])[0].get("message", {}).get("content", "").strip() or msg
 
     return {
         "type": "COHORT_REGION_FEEDBACK",
