@@ -149,11 +149,9 @@ def ocr_to_entry():
         # 2. Add to DB
         from .main import _get_auth_user
         user = _get_auth_user()
-        print(user)
         if not user:
             return jsonify({"error": "Unauthorized"}), 401
         user_id = user.id
-        print("added to db")
 
         date_str = request.form.get("date")
         if date_str:

@@ -6,9 +6,11 @@ import os
 import json
 import datetime
 
+from . import main as m
 from . import utils
 from . import constants
 from . import database as db
+from . import financial_helper as fin
 
 # make a blueprints
 speech_bp = blueprints.Blueprint("speech", __name__)
@@ -79,11 +81,13 @@ def upload_audio():
 
     for expense in parsed.get("items", []):
         e = db.add_expense(
-            user_id=request.form.get("user_id"),
+            user_id= m._get_auth_user().id,
             title=expense["product"],
             amount=expense["price"],
             category=expense["category"],
             date=datetime.datetime.now()
         )
 
-    return jsonify({"message": "Success", "path": filepath, "items": parsed["items"]}), 201
+    budgetStatus = fin.evaluate_all_budget_goals(m._get_auth_user().id)[0]
+
+    return jsonify({"message": "Success", "path": filepath, "items": parsed["items"], "budgetStatus": budgetStatus}), 201
