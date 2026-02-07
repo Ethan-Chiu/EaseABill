@@ -6,7 +6,6 @@ import os
 import json
 import datetime
 
-from . import main as m
 from . import utils
 from . import constants
 from . import database as db
@@ -30,6 +29,9 @@ DETECT_PRODUCT_AND_PRICE_PROMPT = \
 @speech_bp.route("/upload_audio", methods=["POST"])
 def upload_audio():
     print("Received request to /upload_audio")
+    # Import here to avoid circular dependency
+    from .main import _get_auth_user
+    
     # documentation
     """
     Upload an audio file for speech recognition. The audio will be transcribed using Dedalus Labs' API,
@@ -52,6 +54,11 @@ def upload_audio():
         ]
     }
     """
+    
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -62,6 +69,8 @@ def upload_audio():
 
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
+
+    print("file saved to", filepath)
 
     url = "https://api.dedaluslabs.ai/v1/audio/transcriptions"
 
@@ -74,20 +83,26 @@ def upload_audio():
     }
     headers = {"Authorization": f"Bearer {os.getenv('DEDALUS_API_KEY')}"}
 
+    print("Sending audio file to Dedalus Labs for transcription...")
     response = requests.post(url, data=payload, files=files, headers=headers)
 
     llm_response = utils.llm_parse_product_price(DETECT_PRODUCT_AND_PRICE_PROMPT.format(response.text))
+    print("llm", llm_response)
+
     parsed = json.loads(llm_response.get("choices", [{}])[0].get("message", {}).get("content", ""))
+    print("parsed", parsed)
 
     for expense in parsed.get("items", []):
         e = db.add_expense(
-            user_id= m._get_auth_user().id,
+            user_id=user.id,
             title=expense["product"],
             amount=expense["price"],
             category=expense["category"],
             date=datetime.datetime.now()
         )
 
-    budgetStatus = fin.evaluate_all_budget_goals(m._get_auth_user().id)[0]
-
-    return jsonify({"message": "Success", "path": filepath, "items": parsed["items"], "budgetStatus": budgetStatus}), 201
+    print("expenses added to db")
+    # budgetStatus = fin.evaluate_all_budget_goals(user.id)[0]
+    response = jsonify({"message": "Success", "path": filepath, "items": parsed["items"]})
+    print("get response", response)
+    return response, 201
