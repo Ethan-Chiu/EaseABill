@@ -162,17 +162,30 @@ def update_profile():
     if not updated_user:
         return jsonify({"message": "Failed to update profile"}), 500
 
-    # 若有設定 budgetGoal，為此 user 建立一筆當月預算
+    # If budgetGoal is set, create multiple category budgets with proportions
     if updated_user.budget_goal is not None and updated_user.budget_goal > 0:
         start_date, end_date = fh.window_for_period("monthly")
-        db.add_budget(
-            category="Overall",
-            limit=float(updated_user.budget_goal),
-            period="monthly",
-            start_date=start_date,
-            end_date=end_date,
-            user_id=updated_user.id,
-        )
+        total_budget = float(updated_user.budget_goal)
+        
+        # Define budget proportions for different categories
+        budget_proportions = {
+            "Food & Dining": 0.30,      # 30%
+            "Grocery": 0.20,             # 20%
+            "Transportation": 0.20,      # 20%
+            "Shopping / Personal": 0.15, # 15%
+            "Lifestyle": 0.15,           # 15%
+        }
+        
+        # Create a budget for each category
+        for category, proportion in budget_proportions.items():
+            db.add_budget(
+                category=category,
+                limit=total_budget * proportion,
+                period="monthly",
+                start_date=start_date,
+                end_date=end_date,
+                user_id=updated_user.id,
+            )
 
     return jsonify(db.user_to_json(updated_user)), 200
 

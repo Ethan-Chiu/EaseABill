@@ -533,6 +533,7 @@ def budget_spent(*, user_id: str, budget: Budget) -> float:
         user_id=user_id,
         start=budget.start_date,
         end=budget.end_date,
+        category=budget.category,
     )
 
 
@@ -617,7 +618,7 @@ def seed_database() -> None:
             Expense(
                 title="Groceries",
                 amount=120.50,
-                category="Food & Dining",
+                category="Grocery",
                 date=now - timedelta(days=2),
                 description="Weekly groceries",
                 user_id="user1",
@@ -673,24 +674,26 @@ def seed_database() -> None:
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         month_end = (month_start + timedelta(days=31)).replace(day=1) - timedelta(seconds=1)
 
-        budgets = [
-            Budget(
-                category="Food & Dining",
-                limit=600.0,
+        # Split user1's budget goal into category budgets
+        total_budget = user1.budget_goal  # 1500.0
+        budget_proportions = {
+            "Food & Dining": 0.30,      # 30% = $450
+            "Grocery": 0.20,             # 20% = $300
+            "Transportation": 0.20,      # 20% = $300
+            "Shopping / Personal": 0.15, # 15% = $225
+            "Lifestyle": 0.15,           # 15% = $225
+        }
+        
+        budgets = []
+        for category, proportion in budget_proportions.items():
+            budgets.append(Budget(
+                category=category,
+                limit=total_budget * proportion,
                 period="monthly",
                 start_date=month_start,
                 end_date=month_end,
                 user_id="user1",
-            ),
-            Budget(
-                category="Transportation",
-                limit=300.0,
-                period="monthly",
-                start_date=month_start,
-                end_date=month_end,
-                user_id="user1",
-            ),
-        ]
+            ))
 
         for budget in budgets:
             session.add(budget)
@@ -698,5 +701,5 @@ def seed_database() -> None:
         session.commit()
 
         print("✅ Database seeded successfully!")
-        print(f"   Created 2 users, 6 expenses, 2 budgets")
+        print(f"   Created 2 users, 6 expenses, {len(budgets)} budgets")
 
