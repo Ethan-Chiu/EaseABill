@@ -109,7 +109,7 @@ def evaluate_budget_goal(
     Determines if user is on track for ONE budget goal.
 
     Logic:
-    - spent = SUM(expenses) within budget.start_date..end_date for budget.category
+    - spent = SUM(expenses) within budget.start_date..end_date
     - percentUsed = spent / limit * 100
     - expectedPercentByNow = progressRatio * 100 (linear pacing)
     - status:
@@ -122,7 +122,7 @@ def evaluate_budget_goal(
     start = ensure_tz(budget.start_date)
     end = ensure_tz(budget.end_date)
 
-    spent = sum_expenses(user_id=user_id, start=start, end=end, category=budget.category)
+    spent = sum_expenses(user_id=user_id, start=start, end=end)
     limit_amt = float(budget.limit)
     remaining = limit_amt - spent
 
@@ -137,20 +137,20 @@ def evaluate_budget_goal(
     if spent > limit_amt:
         status: GoalStatus = "OVERSPENT"
         should_notify = True
-        msg = f"{budget.category}: budget exceeded. Remaining {remaining:.2f}."
+        msg = f"Budget exceeded. Remaining {remaining:.2f}."
     else:
         is_warning = (percent_used >= notify_percent_used) or (ahead_percent >= notify_ahead_of_pace_percent)
         if is_warning:
             status = "WARNING"
             should_notify = True
             msg = (
-                f"{budget.category}: {percent_used:.0f}% used "
+                f"Budget: {percent_used:.0f}% used "
                 f"({ahead_percent:+.0f}% vs pace). Remaining {remaining:.2f}."
             )
         else:
             status = "ON_TRACK"
             should_notify = False
-            msg = f"{budget.category}: on track ({percent_used:.0f}% used). Remaining {remaining:.2f}."
+            msg = f"Budget: on track ({percent_used:.0f}% used). Remaining {remaining:.2f}."
 
 
     msg = llm_roast_budget(msg).get("choices", [{}])[0].get("message", {}).get("content", "").strip() or msg
@@ -158,7 +158,6 @@ def evaluate_budget_goal(
     payload = {
         "goalType": "BUDGET",
         "budgetId": str(budget.id),
-        "category": budget.category,
         "period": budget.period,
         "window": {"start": start.isoformat(), "end": end.isoformat()},
         "spent": spent,
@@ -210,13 +209,13 @@ def evaluate_on_new_expense(
     """
     Real-time feedback: call after inserting a new expense.
     Strategy:
-    - Evaluate only budgets that match expense.category and are active at 'now'.
+    - Evaluate all active budgets at 'now' (budgets are no longer per-category).
     - Return alerts for WARNING/OVERSPENT (or shouldNotify=True).
     """
     now = ensure_tz(now or utc_now())
     budgets = list_budgets(user_id=user_id, active_only=True, now=now)
 
-    impacted = [b for b in budgets if b.category == expense.category]
+    impacted = budgets
     alerts: list[dict[str, Any]] = []
     for b in impacted:
         r = evaluate_budget_goal(user_id=user_id, budget=b, now=now)
@@ -314,7 +313,7 @@ def budgets_with_spent(
 
     out: list[dict[str, Any]] = []
     for b in budgets:
-        spent = sum_expenses(user_id=user_id, start=b.start_date, end=b.end_date, category=b.category)
+        spent = sum_expenses(user_id=user_id, start=b.start_date, end=b.end_date)
         out.append(budget_to_json(b, spent=spent))
     return out
 
@@ -337,7 +336,7 @@ def spoken_summary(
         top = warn[0]
         return (
             f"This {period}, you spent {s['spent']:.0f}. "
-            f"{top['category']} is {top['percentUsed']:.0f}% used and {top['status'].lower()}."
+            f"Budget is {top['percentUsed']:.0f}% used and {top['status'].lower()}."
         )
 
     return f"This {period}, you spent {s['spent']:.0f}. All budgets are on track."

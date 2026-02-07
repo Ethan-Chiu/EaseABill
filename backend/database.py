@@ -79,7 +79,6 @@ class Budget(SQLModel, table=True):
     __tablename__ = "budgets"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    category: str
     limit: float
     period: str  # "weekly" | "monthly" | "yearly"
     start_date: datetime  # timestamptz
@@ -121,7 +120,6 @@ def budget_to_json(b: Budget, *, spent: float = 0.0) -> dict[str, Any]:
     # spent 通常是「算出來」的，預設 0；分析層可傳入實際 spent
     return {
         "id": str(b.id),
-        "category": b.category,
         "limit": float(b.limit),
         "spent": float(spent),
         "period": b.period,
@@ -269,7 +267,6 @@ def delete_expense(expense_id: UUID) -> bool:
 # ----------------------------
 def add_budget(
     *,
-    category: str,
     limit: float,
     period: Period,
     start_date: datetime,
@@ -277,7 +274,6 @@ def add_budget(
     user_id: Optional[str] = None,
 ) -> Budget:
     b = Budget(
-        category=category,
         limit=float(limit),
         period=period,
         start_date=_ensure_tz(start_date),
@@ -312,7 +308,6 @@ def update_budget(
     budget_id: UUID,
     *,
     user_id: str,
-    category: Optional[str] = None,
     limit: Optional[float] = None,
     period: Optional[Period] = None,
     start_date: Optional[datetime] = None,
@@ -323,8 +318,6 @@ def update_budget(
         if b is None or b.user_id != user_id:
             return None
 
-        if category is not None:
-            b.category = category
         if limit is not None:
             b.limit = float(limit)
         if period is not None:
@@ -452,7 +445,6 @@ def budget_spent(*, user_id: str, budget: Budget) -> float:
         user_id=user_id,
         start=budget.start_date,
         end=budget.end_date,
-        category=budget.category,
     )
 
 
@@ -593,7 +585,6 @@ def seed_database() -> None:
 
         budgets = [
             Budget(
-                category="Food & Dining",
                 limit=600.0,
                 period="monthly",
                 start_date=month_start,
@@ -601,24 +592,7 @@ def seed_database() -> None:
                 user_id="user1",
             ),
             Budget(
-                category="Transportation",
                 limit=300.0,
-                period="monthly",
-                start_date=month_start,
-                end_date=month_end,
-                user_id="user1",
-            ),
-            Budget(
-                category="Entertainment",
-                limit=200.0,
-                period="monthly",
-                start_date=month_start,
-                end_date=month_end,
-                user_id="user1",
-            ),
-            Budget(
-                category="Health & Fitness",
-                limit=150.0,
                 period="monthly",
                 start_date=month_start,
                 end_date=month_end,
@@ -632,5 +606,5 @@ def seed_database() -> None:
         session.commit()
 
         print("✅ Database seeded successfully!")
-        print(f"   Created 2 users, 2 tokens, 6 expenses, 4 budgets")
+        print(f"   Created 2 users, 6 expenses, 2 budgets")
 
