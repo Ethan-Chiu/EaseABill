@@ -4,11 +4,15 @@ import hashlib
 import secrets
 import db
 
+from speech import speech_bp
+
 app = Flask(__name__)
 
 # Simple in-memory token store (use Redis/DB in production)
 _tokens = {}
 
+# register blueprints
+app.register_blueprint(speech_bp, url_prefix="/api/speech")
 
 def _hash_password(password: str) -> str:
     """Hash password with salt"""
