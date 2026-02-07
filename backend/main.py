@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from datetime import datetime, timedelta
 import hashlib
 import secrets
@@ -7,7 +8,17 @@ from .ocr import ocr_bp
 from .speech import speech_bp
 
 app = Flask(__name__)
-app.register_blueprint(ocr_bp)
+# Enable CORS for all domains on all routes
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True, allow_headers=["Content-Type", "Authorization"])
+
+# Initialize database tables immediately (safe to call multiple times)
+try:
+    with app.app_context():
+        db.init_db()
+except Exception as e:
+    print(f"Warning: Database initialization failed: {e}")
+
+app.register_blueprint(ocr_bp, url_prefix="/api/ocr")
 # register blueprints
 app.register_blueprint(speech_bp, url_prefix="/api/speech")
 
