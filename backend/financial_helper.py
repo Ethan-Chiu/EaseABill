@@ -7,7 +7,7 @@ from typing import Any, Optional, Literal
 
 from uuid import UUID
 
-from db import (
+from .database import (
     Budget,
     Expense,
     list_budgets,

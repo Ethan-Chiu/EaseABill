@@ -6,7 +6,8 @@ import json
 import base64
 import io
 from PIL import Image
-import utils
+from . import utils
+from . import constants
 
 ocr_bp = Blueprint('ocr', __name__)
 load_dotenv()
@@ -14,10 +15,12 @@ load_dotenv()
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DETECT_PRODUCT_AND_PRICE_FROM_IMAGE_PROMPT = \
-    "Detect the products bought and the prices from the following receipt text (OCR result), and " \
-    "return the result in a JSON format with a list of items, each containing" \
-    "'product' and 'price','' fields: \"{}\""
+DETECT_PRODUCT_AND_PRICE_PROMPT = \
+    "The categories are: " + ", ".join(constants.EXPENSE_CATEGORIES) + ". " \
+    "Detect the products bought, the prices (in dollars), and the categories from the following text," \
+    "and return the result in a JSON format with a list of items, each containing" \
+    "'product', 'price', and 'category' fields: \"{}\""
+
 
 @ocr_bp.route("/upload-image", methods=["POST"])
 def upload_image():
@@ -98,7 +101,7 @@ def upload_image():
             full_text = json.dumps(ocr_json)
 
         # 3. 使用 LLM 解析由 OCR 取得的文字
-        llm_response = utils.llm_parse_product_price(DETECT_PRODUCT_AND_PRICE_FROM_IMAGE_PROMPT.format(full_text))
+        llm_response = utils.llm_parse_product_price(DETECT_PRODUCT_AND_PRICE_PROMPT.format(full_text))
         
         # 處理 LLM 回傳的內容
         content = llm_response.get("choices", [{}])[0].get("message", {}).get("content", "")
