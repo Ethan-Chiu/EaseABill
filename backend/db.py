@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
+from uuid import UUID, uuid4
 
-import psycopg
-from psycopg.rows import dict_row
+from sqlmodel import SQLModel, Field, Session, create_engine, select
 
 
 def _env(key: str, default: str) -> str:
@@ -13,52 +13,47 @@ def _env(key: str, default: str) -> str:
     return v if v else default
 
 
-def get_conn() -> psycopg.Connection:
-    """
-    Minimal connection helper.
-    Defaults match your docker-compose:
-      user=postgres, password=postgres, db=easeabill, host=localhost, port=5432
-    Override via env vars: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-    """
-    host = _env("DB_HOST", "localhost")
+def get_engine():
+    host = _env("DB_HOST", "postgres")
     port = _env("DB_PORT", "5432")
     name = _env("DB_NAME", "easeabill")
     user = _env("DB_USER", "postgres")
     password = _env("DB_PASSWORD", "postgres")
 
-    dsn = f"host={host} port={port} dbname={name} user={user} password={password}"
-    return psycopg.connect(dsn, row_factory=dict_row)
+    # psycopg3 driver
+    url = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"
+    # echo=True 可以看到 ORM 產生的 SQL（debug 用）
+    return create_engine(url, echo=False)
 
 
-def init_db() -> None:
-    """
-    Create only the expenses table (minimum needed for CRUD).
-    """
-    sql = """
-    CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-    CREATE TABLE IF NOT EXISTS expenses (
-        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        title       TEXT NOT NULL,
-        amount      NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
-        category    TEXT NOT NULL,
-        date        TIMESTAMPTZ NOT NULL,
-        description TEXT,
-        user_id     TEXT,
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date DESC);
-    """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-        conn.commit()
+engine = get_engine()
 
 
 # ----------------------------
-# Expense CRUD
+# Models (tables)
+# ----------------------------
+
+class Expense(SQLModel, table=True):
+    __tablename__ = "expenses"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    title: str
+    amount: float
+    category: str
+    date: datetime
+    description: Optional[str] = None
+    user_id: Optional[str] = Field(default=None, index=True)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+def init_db() -> None:
+    SQLModel.metadata.create_all(engine)
+
+
+# ----------------------------
+# CRUD helpers
 # ----------------------------
 
 def add_expense(
@@ -69,155 +64,75 @@ def add_expense(
     date: datetime,
     description: Optional[str] = None,
     user_id: Optional[str] = None,
-) -> dict[str, Any]:
-    sql = """
-    INSERT INTO expenses (title, amount, category, date, description, user_id)
-    VALUES (%(title)s, %(amount)s, %(category)s, %(date)s, %(description)s, %(user_id)s)
-    RETURNING
-      id::text AS id,
-      title,
-      amount::float8 AS amount,
-      category,
-      date,
-      description,
-      user_id AS "userId";
-    """
-    params = {
-        "title": title,
-        "amount": amount,
-        "category": category,
-        "date": date,
-        "description": description,
-        "user_id": user_id,
-    }
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            row = cur.fetchone()
-        conn.commit()
-    if row is None:
-        raise RuntimeError("Failed to insert expense")
-    return row
+) -> Expense:
+    e = Expense(
+        title=title,
+        amount=amount,
+        category=category,
+        date=date,
+        description=description,
+        user_id=user_id,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    with Session(engine) as session:
+        session.add(e)
+        session.commit()
+        session.refresh(e)  # 把 DB 產生/更新後的值同步回物件
+        return e
 
 
-def list_expenses(*, user_id: Optional[str] = None, limit: int = 200) -> list[dict[str, Any]]:
-    if user_id is None:
-        sql = """
-        SELECT
-          id::text AS id,
-          title,
-          amount::float8 AS amount,
-          category,
-          date,
-          description,
-          user_id AS "userId"
-        FROM expenses
-        ORDER BY date DESC
-        LIMIT %(limit)s;
-        """
-        params = {"limit": limit}
-    else:
-        sql = """
-        SELECT
-          id::text AS id,
-          title,
-          amount::float8 AS amount,
-          category,
-          date,
-          description,
-          user_id AS "userId"
-        FROM expenses
-        WHERE user_id = %(user_id)s
-        ORDER BY date DESC
-        LIMIT %(limit)s;
-        """
-        params = {"user_id": user_id, "limit": limit}
+def get_expense(expense_id: UUID) -> Optional[Expense]:
+    with Session(engine) as session:
+        return session.get(Expense, expense_id)
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-            return list(rows or [])
+
+def list_expenses(*, user_id: Optional[str] = None, limit: int = 200) -> list[Expense]:
+    stmt = select(Expense).order_by(Expense.date.desc()).limit(limit)
+    if user_id is not None:
+        stmt = stmt.where(Expense.user_id == user_id)
+
+    with Session(engine) as session:
+        return list(session.exec(stmt).all())
 
 
 def update_expense(
-    expense_id: str,
+    expense_id: UUID,
     *,
     title: Optional[str] = None,
     amount: Optional[float] = None,
     category: Optional[str] = None,
     date: Optional[datetime] = None,
     description: Optional[str] = None,
-) -> Optional[dict[str, Any]]:
-    sets = []
-    params: dict[str, Any] = {"id": expense_id}
+) -> Optional[Expense]:
+    with Session(engine) as session:
+        e = session.get(Expense, expense_id)
+        if e is None:
+            return None
 
-    if title is not None:
-        sets.append("title = %(title)s")
-        params["title"] = title
-    if amount is not None:
-        sets.append("amount = %(amount)s")
-        params["amount"] = amount
-    if category is not None:
-        sets.append("category = %(category)s")
-        params["category"] = category
-    if date is not None:
-        sets.append("date = %(date)s")
-        params["date"] = date
-    if description is not None:
-        sets.append("description = %(description)s")
-        params["description"] = description
+        if title is not None:
+            e.title = title
+        if amount is not None:
+            e.amount = amount
+        if category is not None:
+            e.category = category
+        if date is not None:
+            e.date = date
+        if description is not None:
+            e.description = description
 
-    if not sets:
-        return get_expense(expense_id)
-
-    sql = f"""
-    UPDATE expenses
-    SET {", ".join(sets)}, updated_at = now()
-    WHERE id::text = %(id)s
-    RETURNING
-      id::text AS id,
-      title,
-      amount::float8 AS amount,
-      category,
-      date,
-      description,
-      user_id AS "userId";
-    """
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            row = cur.fetchone()
-        conn.commit()
-    return row
+        e.updated_at = datetime.utcnow()
+        session.add(e)
+        session.commit()
+        session.refresh(e)
+        return e
 
 
-def delete_expense(expense_id: str) -> bool:
-    sql = "DELETE FROM expenses WHERE id::text = %(id)s;"
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, {"id": expense_id})
-            ok = cur.rowcount > 0
-        conn.commit()
-    return ok
-
-
-def get_expense(expense_id: str) -> Optional[dict[str, Any]]:
-    sql = """
-    SELECT
-      id::text AS id,
-      title,
-      amount::float8 AS amount,
-      category,
-      date,
-      description,
-      user_id AS "userId"
-    FROM expenses
-    WHERE id::text = %(id)s
-    LIMIT 1;
-    """
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, {"id": expense_id})
-            return cur.fetchone()
+def delete_expense(expense_id: UUID) -> bool:
+    with Session(engine) as session:
+        e = session.get(Expense, expense_id)
+        if e is None:
+            return False
+        session.delete(e)
+        session.commit()
+        return True
