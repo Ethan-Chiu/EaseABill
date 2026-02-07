@@ -14,7 +14,7 @@ def _env(key: str, default: str) -> str:
 
 
 def get_engine():
-    host = _env("DB_HOST", "postgres")
+    host = _env("DB_HOST", "localhost") #testing in local
     port = _env("DB_PORT", "5432")
     name = _env("DB_NAME", "easeabill")
     user = _env("DB_USER", "postgres")
