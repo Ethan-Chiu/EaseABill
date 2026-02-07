@@ -319,6 +319,54 @@ class ApiClient {
   String _getFileName(String path) {
     return path.split('/').last;
   }
+
+  // ==================== Authentication Endpoints ====================
+
+  /// Login with username and password
+  Future<Map<String, dynamic>> login(String username, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'username': username,
+        'password': password,
+      }),
+    );
+    return _handleResponse(response);
+  }
+
+  /// Register new user
+  Future<Map<String, dynamic>> register(String username, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'username': username,
+        'password': password,
+      }),
+    );
+    return _handleResponse(response);
+  }
+
+  /// Update user profile
+  Future<Map<String, dynamic>> updateUserProfile({
+    String? location,
+    double? monthlyIncome,
+    double? budgetGoal,
+    bool? isOnboarded,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/user/profile'),
+      headers: _headers,
+      body: json.encode({
+        if (location != null) 'location': location,
+        if (monthlyIncome != null) 'monthlyIncome': monthlyIncome,
+        if (budgetGoal != null) 'budgetGoal': budgetGoal,
+        if (isOnboarded != null) 'isOnboarded': isOnboarded,
+      }),
+    );
+    return _handleResponse(response);
+  }
 }
 
 // Custom exception for API errors
