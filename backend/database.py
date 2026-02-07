@@ -71,6 +71,7 @@ class User(SQLModel, table=True):
     monthly_income: Optional[float] = None
     budget_goal: Optional[float] = None
     is_onboarded: bool = Field(default=False)
+    current_streak: int = Field(default=0)
 
     created_at: datetime = Field(default_factory=_utc_now)
     updated_at: datetime = Field(default_factory=_utc_now)
@@ -151,6 +152,7 @@ def user_to_json(u: User) -> dict[str, Any]:
         "monthlyIncome": u.monthly_income,
         "budgetGoal": u.budget_goal,
         "isOnboarded": u.is_onboarded,
+        "currentStreak": u.current_streak,
     }
 
 # ----------------------------

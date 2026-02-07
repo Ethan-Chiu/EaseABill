@@ -454,6 +454,36 @@ class ApiClient {
     final data = _handleResponse(response) as List;
     return data.cast<Map<String, dynamic>>();
   }
+
+  // ==================== Streak Endpoints ====================
+
+  /// Get user's current streak
+  Future<Map<String, dynamic>> getUserStreak() async {
+    final uri = Uri.parse('$baseUrl/user/streak');
+    _logRequest('GET', uri);
+    final response = await http.get(uri, headers: _headers);
+    return _handleResponse(response);
+  }
+
+  /// Get daily budget compliance status for calendar
+  Future<List<Map<String, dynamic>>> getDailyStatus({int days = 30, DateTime? end}) async {
+    var uri = Uri.parse('$baseUrl/stats/daily-status');
+    
+    final params = <String, String>{
+      'days': days.toString(),
+    };
+    
+    if (end != null) {
+      params['end'] = end.toIso8601String();
+    }
+    
+    uri = uri.replace(queryParameters: params);
+    
+    _logRequest('GET', uri);
+    final response = await http.get(uri, headers: _headers);
+    final data = _handleResponse(response) as List;
+    return data.cast<Map<String, dynamic>>();
+  }
 }
 
 // Custom exception for API errors

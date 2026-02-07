@@ -112,6 +112,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 _buildWeeklyLineChart(context),
                 const SizedBox(height: 24),
                 Text(
+                  'Budget Compliance Calendar',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Track your daily budget adherence',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                _BudgetCalendar(),
+                const SizedBox(height: 24),
+                Text(
                   'Spending by Category',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
@@ -409,3 +421,212 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 }
+
+// Budget Calendar Widget
+class _BudgetCalendar extends StatefulWidget {
+  @override
+  State<_BudgetCalendar> createState() => _BudgetCalendarState();
+}
+
+class _BudgetCalendarState extends State<_BudgetCalendar> {
+  final _apiClient = ApiClient();
+  Map<String, Map<String, dynamic>> _dailyStatusMap = {};
+  bool _isLoading = false;
+  DateTime _currentMonth = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDailyStatus();
+  }
+
+  Future<void> _loadDailyStatus() async {
+    setState(() => _isLoading = true);
+    try {
+      // Get first and last day of current month
+      final firstDay = DateTime(_currentMonth.year, _currentMonth.month, 1);
+      final lastDay = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
+      final days = lastDay.day;
+      
+      final data = await _apiClient.getDailyStatus(days: days, end: lastDay);
+      
+      // Convert list to map for easy lookup by date
+      final statusMap = <String, Map<String, dynamic>>{};
+      for (var item in data) {
+        final date = DateTime.parse(item['date']);
+        final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        statusMap[dateKey] = item;
+      }
+      
+      setState(() {
+        _dailyStatusMap = statusMap;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Color _getStatusColor(Map<String, dynamic>? day) {
+    if (day == null || !day['hasData']) {
+      return Colors.grey.shade200;
+    }
+    if (day['compliant'] == true) {
+      return Colors.green.shade400;
+    } else {
+      return Colors.red.shade400;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final firstDay = DateTime(_currentMonth.year, _currentMonth.month, 1);
+    final lastDay = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
+    final firstWeekday = firstDay.weekday % 7; // 0 = Sunday, 1 = Monday, etc.
+    final daysInMonth = lastDay.day;
+    final today = DateTime.now();
+    
+    // Total cells = empty cells before month + days in month
+    final totalCells = firstWeekday + daysInMonth;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Month/Year header
+            Text(
+              DateFormat('MMMM yyyy').format(_currentMonth),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Legend
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildLegendItem(Colors.green.shade400, 'Compliant'),
+                _buildLegendItem(Colors.red.shade400, 'Overspent'),
+                _buildLegendItem(Colors.grey.shade200, 'No Data'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Weekday headers
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                childAspectRatio: 1,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: 7,
+              itemBuilder: (context, index) {
+                final weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                return Center(
+                  child: Text(
+                    weekdays[index],
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            // Calendar grid
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                childAspectRatio: 1,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: totalCells,
+              itemBuilder: (context, index) {
+                // Empty cell before first day of month
+                if (index < firstWeekday) {
+                  return const SizedBox.shrink();
+                }
+                
+                final dayNumber = index - firstWeekday + 1;
+                final date = DateTime(_currentMonth.year, _currentMonth.month, dayNumber);
+                final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                final dayData = _dailyStatusMap[dateKey];
+                final color = _getStatusColor(dayData);
+                
+                // Check if this is today
+                final isToday = date.year == today.year && 
+                               date.month == today.month && 
+                               date.day == today.day;
+                
+                return Tooltip(
+                  message: '${DateFormat('MMM d').format(date)}\n${dayData?['compliant'] == true ? 'Budget met' : dayData?['hasData'] == true ? 'Overspent' : 'No data'}',
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isToday ? Theme.of(context).primaryColor : Colors.grey.shade300,
+                        width: isToday ? 3 : 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$dayNumber',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+                          color: dayData?['hasData'] == true ? Colors.white : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+

@@ -190,6 +190,31 @@ def update_profile():
     return jsonify(db.user_to_json(updated_user)), 200
 
 
+@app.route("/api/user/streak", methods=["GET"])
+def get_user_streak():
+    """Get user's current streak and update it"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    # Calculate current streak
+    streak = fh.calculate_user_streak(user_id=user.id)
+    
+    # Update user's streak in database
+    with db.Session(db.engine) as session:
+        u = session.get(db.User, user.id)
+        if u:
+            u.current_streak = streak
+            u.updated_at = db._utc_now()
+            session.add(u)
+            session.commit()
+    
+    return jsonify({
+        "streak": streak,
+        "userId": user.id,
+    }), 200
+
+
 
 @app.route("/")
 def hello_world():
@@ -515,6 +540,35 @@ def get_notifications():
     
     statuses = db.list_budget_statuses(user_id=user.id, date=date)
     return jsonify([db.budget_status_to_json(bs) for bs in statuses]), 200
+
+
+@app.route("/api/stats/daily-status", methods=["GET"])
+def get_daily_status():
+    """Get daily budget compliance status for calendar view"""
+    user = _get_auth_user()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    # Get date range from query params (default to last 30 days)
+    end_str = request.args.get("end")
+    days = int(request.args.get("days", "30"))
+    
+    if end_str:
+        try:
+            end_date = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+        except ValueError:
+            end_date = fh.utc_now()
+    else:
+        end_date = fh.utc_now()
+    
+    start_date = end_date - timedelta(days=days)
+    
+    data = fh.get_daily_budget_status(
+        user_id=user.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return jsonify(data), 200
 
 
 @app.errorhandler(Exception)

@@ -510,3 +510,144 @@ def compare_user_to_cohort_in_region(
             "window": {"start": start.isoformat(), "end": end.isoformat()},
         },
     }
+
+
+# ----------------------------
+# Streak calculation
+# ----------------------------
+
+def check_day_budget_compliance(
+    *,
+    user_id: str,
+    date: datetime,
+) -> bool:
+    """
+    Check if user met all their budgets on a specific day (didn't overspend in any category).
+    Returns True if compliant, False if overspent any budget.
+    """
+    date = ensure_tz(date)
+    # Get start and end of the day
+    day_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    
+    # Get all active budgets for this day
+    budgets = list_budgets(user_id=user_id, active_only=True, now=date)
+    
+    if not budgets:
+        # No budgets = compliant (can't overspend if no budget set)
+        return True
+    
+    # Check each budget to see if spending exceeded limit
+    for budget in budgets:
+        # Calculate total spent in this budget's category up to this day
+        spent = sum_expenses(
+            user_id=user_id,
+            start=budget.start_date,
+            end=day_end,  # Include spending up to end of this day
+            category=budget.category,
+        )
+        
+        # Calculate how much should be spent by now (linear pacing)
+        budget_progress = progress_ratio(budget.start_date, budget.end_date, day_end)
+        expected_spent = budget.limit * budget_progress
+        
+        # If actual spending exceeds the budget limit, not compliant
+        if spent > budget.limit:
+            return False
+    
+    return True
+
+
+def calculate_user_streak(*, user_id: str, now: Optional[datetime] = None) -> int:
+    """
+    Calculate consecutive days (including today) where user didn't overspend any budget.
+    Counts backwards from today until we find a day where they overspent OR reach their join date.
+    """
+    now = ensure_tz(now or utc_now())
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get user's join date
+    user = db.get_user_by_id(user_id)
+    if user is None:
+        return 0
+    
+    user_join_date = ensure_tz(user.created_at).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Don't count days before user joined
+    if today_start < user_join_date:
+        return 0
+    
+    streak = 0
+    check_date = today_start
+    
+    # Check backwards until we find a non-compliant day or reach join date
+    while check_date >= user_join_date:
+        if check_day_budget_compliance(user_id=user_id, date=check_date):
+            streak += 1
+            check_date = check_date - timedelta(days=1)
+        else:
+            # Found a day where they overspent, stop counting
+            break
+    
+    return streak
+
+
+def get_daily_budget_status(
+    *,
+    user_id: str,
+    start_date: datetime,
+    end_date: datetime,
+) -> list[dict[str, Any]]:
+    """
+    Get budget compliance status for each day in the date range.
+    Returns list of {date, compliant, hasData} for calendar visualization.
+    Only includes days from when the user joined the app onwards.
+    """
+    start_date = ensure_tz(start_date).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_date = ensure_tz(end_date).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = ensure_tz(utc_now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get user's join date
+    user = db.get_user_by_id(user_id)
+    if user is None:
+        return []
+    
+    user_join_date = ensure_tz(user.created_at).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Don't include days before user joined
+    if start_date < user_join_date:
+        start_date = user_join_date
+    
+    # Don't include days after today
+    if end_date > today:
+        end_date = today
+    
+    result = []
+    current_date = start_date
+    
+    while current_date <= end_date:
+        # Check if user has any budgets on this day
+        budgets = list_budgets(user_id=user_id, active_only=True, now=current_date)
+        has_budgets = len(budgets) > 0
+        
+        # Check if user has any expenses on this day
+        day_end = current_date + timedelta(days=1)
+        has_expenses = sum_expenses(
+            user_id=user_id,
+            start=current_date,
+            end=day_end,
+        ) > 0
+        
+        compliant = check_day_budget_compliance(user_id=user_id, date=current_date)
+        
+        result.append({
+            "date": current_date.isoformat(),
+            "compliant": compliant,
+            "hasBudgets": has_budgets,
+            "hasExpenses": has_expenses,
+            "hasData": has_budgets or has_expenses,
+        })
+        
+        current_date += timedelta(days=1)
+    
+    return result

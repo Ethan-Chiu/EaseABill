@@ -4,9 +4,38 @@ import 'package:intl/intl.dart';
 import '../data/service/expense_service.dart';
 import '../data/model/budget.dart';
 import '../data/model/category.dart';
+import '../data/client.dart';
 
-class BudgetsScreen extends StatelessWidget {
+class BudgetsScreen extends StatefulWidget {
   const BudgetsScreen({super.key});
+
+  @override
+  State<BudgetsScreen> createState() => _BudgetsScreenState();
+}
+
+class _BudgetsScreenState extends State<BudgetsScreen> {
+  final _apiClient = ApiClient();
+  int _currentStreak = 0;
+  bool _loadingStreak = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStreak();
+  }
+
+  Future<void> _loadStreak() async {
+    setState(() => _loadingStreak = true);
+    try {
+      final result = await _apiClient.getUserStreak();
+      setState(() {
+        _currentStreak = result['streak'] ?? 0;
+        _loadingStreak = false;
+      });
+    } catch (e) {
+      setState(() => _loadingStreak = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +43,40 @@ class BudgetsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Budgets'),
         actions: [
+          // Streak badge
+          if (!_loadingStreak)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange.shade400, Colors.deepOrange.shade600],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.local_fire_department, color: Colors.white, size: 20),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$_currentStreak',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showAddBudgetDialog(context),
