@@ -10,6 +10,8 @@ from PIL import Image
 from . import utils
 from . import constants
 from . import database as db
+from . import financial_helper as fin
+from . import main as m
 
 ocr_bp = Blueprint('ocr', __name__)
 load_dotenv()
@@ -146,7 +148,7 @@ def ocr_to_entry():
         items = process_receipt_file(filepath)
 
         # 2. Add to DB
-        user_id = request.form.get("userId")  # e.g. "uuid..."
+        user_id = m._get_auth_user()
         
         date_str = request.form.get("date")
         if date_str:
@@ -185,10 +187,15 @@ def ocr_to_entry():
             )
             created_list.append(db.expense_to_json(exp))
         
+        if user_id:
+            db.get_user_by_id(user_id)
+            budget_status = fin.evaluate_all_budget_goals(user_id=user_id)[0]
+
         return jsonify({
             "message": "Successfully scanned and saved expenses",
             "count": len(created_list),
-            "expenses": created_list
+            "expenses": created_list,
+            "budgetStatus": budget_status
         }), 201
 
     except ValueError as ve:
