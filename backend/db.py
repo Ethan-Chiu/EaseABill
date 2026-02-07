@@ -58,6 +58,20 @@ class Expense(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utc_now)
     updated_at: datetime = Field(default_factory=_utc_now)
 
+class User(SQLModel, table=True):
+    __tablename__ = "users"
+
+    id: str = Field(primary_key=True)
+    username: str = Field(unique=True, index=True)
+    password_hash: str
+    location: Optional[str] = None
+    monthly_income: Optional[float] = None
+    budget_goal: Optional[float] = None
+    is_onboarded: bool = Field(default=False)
+
+    created_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=_utc_now)
+
 class Budget(SQLModel, table=True):
     __tablename__ = "budgets"
 
@@ -103,6 +117,17 @@ def budget_to_json(b: Budget, *, spent: float = 0.0) -> dict[str, Any]:
         "startDate": _ensure_tz(b.start_date).isoformat(),
         "endDate": _ensure_tz(b.end_date).isoformat(),
         "userId": b.user_id,
+    }
+
+
+def user_to_json(u: User) -> dict[str, Any]:
+    return {
+        "id": u.id,
+        "username": u.username,
+        "location": u.location,
+        "monthlyIncome": u.monthly_income,
+        "budgetGoal": u.budget_goal,
+        "isOnboarded": u.is_onboarded,
     }
 
 # ----------------------------
@@ -302,6 +327,70 @@ def sum_expenses(
     with Session(engine) as session:
         v = session.exec(stmt).one()
         return float(v or 0.0)
+
+
+# ----------------------------
+# User CRUD
+# ----------------------------
+
+def add_user(
+    *,
+    username: str,
+    password_hash: str,
+) -> User:
+    user_id = str(uuid4())
+    u = User(
+        id=user_id,
+        username=username,
+        password_hash=password_hash,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+    with Session(engine) as session:
+        session.add(u)
+        session.commit()
+        session.refresh(u)
+        return u
+
+
+def get_user_by_id(user_id: str) -> Optional[User]:
+    with Session(engine) as session:
+        return session.get(User, user_id)
+
+
+def get_user_by_username(username: str) -> Optional[User]:
+    stmt = select(User).where(User.username == username)
+    with Session(engine) as session:
+        return session.exec(stmt).first()
+
+
+def update_user_profile(
+    user_id: str,
+    *,
+    location: Optional[str] = None,
+    monthly_income: Optional[float] = None,
+    budget_goal: Optional[float] = None,
+    is_onboarded: Optional[bool] = None,
+) -> Optional[User]:
+    with Session(engine) as session:
+        u = session.get(User, user_id)
+        if u is None:
+            return None
+
+        if location is not None:
+            u.location = location
+        if monthly_income is not None:
+            u.monthly_income = float(monthly_income)
+        if budget_goal is not None:
+            u.budget_goal = float(budget_goal)
+        if is_onboarded is not None:
+            u.is_onboarded = is_onboarded
+
+        u.updated_at = _utc_now()
+        session.add(u)
+        session.commit()
+        session.refresh(u)
+        return u
 
 
 def budget_spent(*, user_id: str, budget: Budget) -> float:

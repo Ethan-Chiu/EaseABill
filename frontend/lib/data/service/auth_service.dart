@@ -51,7 +51,7 @@ class AuthService extends ChangeNotifier {
       _client.setAuthToken(_token!);
       await _saveAuthState();
       _error = null;
-      notifyListeners();
+      _setLoading(false);
       return true;
     } catch (e) {
       _error = e.toString();
@@ -72,7 +72,7 @@ class AuthService extends ChangeNotifier {
       _client.setAuthToken(_token!);
       await _saveAuthState();
       _error = null;
-      notifyListeners();
+      _setLoading(false);
       return true;
     } catch (e) {
       _error = e.toString();
@@ -99,7 +99,7 @@ class AuthService extends ChangeNotifier {
       _currentUser = User.fromJson(response);
       await _saveAuthState();
       _error = null;
-      notifyListeners();
+      _setLoading(false);
       return true;
     } catch (e) {
       _error = e.toString();

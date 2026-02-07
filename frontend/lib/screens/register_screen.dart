@@ -35,7 +35,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
 
     if (mounted) {
-      if (!success) {
+      if (success) {
+        // Registration successful, navigate back to login
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Registration successful! Please login.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(authService.error ?? 'Registration failed'),

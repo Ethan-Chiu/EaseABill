@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
+import 'package:frontend/environments/environment_singleton.dart';
 import 'package:http/http.dart' as http;
 import 'model/expense.dart';
 import 'model/budget.dart';
@@ -14,8 +14,10 @@ class ApiClient {
   }) : baseUrl = baseUrl ?? _defaultBaseUrl();
 
   static String _defaultBaseUrl() {
-    const override = String.fromEnvironment('API_BASE_URL');
-    if (override.isNotEmpty) return override;
+    String url = Environment().config.baseUrl;
+    print('Base Url: $url');
+
+    if (url.isNotEmpty) return url;
 
     if (Platform.isAndroid) {
       return 'http://10.0.2.2:8000/api';
