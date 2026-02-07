@@ -3,9 +3,10 @@ from flask_cors import CORS
 from datetime import datetime, timedelta
 import hashlib
 import secrets
-from backend import database as db
-from backend.ocr import ocr_bp
-from backend.speech import speech_bp
+from . import database as db
+from . import financial_helper as fh
+from .ocr import ocr_bp
+from .speech import speech_bp
 
 app = Flask(__name__)
 # Enable CORS for all domains on all routes
@@ -153,10 +154,20 @@ def update_profile():
         budget_goal=data.get('budgetGoal'),
         is_onboarded=data.get('isOnboarded'),
     )
-    
     if not updated_user:
         return jsonify({"message": "Failed to update profile"}), 500
-    
+
+    # 若有設定 budgetGoal，為此 user 建立一筆當月預算
+    if updated_user.budget_goal is not None and updated_user.budget_goal > 0:
+        start_date, end_date = fh.window_for_period("monthly")
+        db.add_budget(
+            limit=float(updated_user.budget_goal),
+            period="monthly",
+            start_date=start_date,
+            end_date=end_date,
+            user_id=updated_user.id,
+        )
+
     return jsonify(db.user_to_json(updated_user)), 200
 
 
