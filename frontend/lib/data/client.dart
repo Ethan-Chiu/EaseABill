@@ -27,6 +27,7 @@ class ApiClient {
 
   // Set authentication token
   void setAuthToken(String token) {
+    print('Setting auth token: $token');
     _authToken = token;
   }
 
@@ -37,6 +38,9 @@ class ApiClient {
     };
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
+      print('DEBUG: Adding Authorization header with token');
+    } else {
+      print('DEBUG: _authToken is null, no Authorization header will be added');
     }
     return headers;
   }
@@ -359,6 +363,7 @@ class ApiClient {
     double? budgetGoal,
     bool? isOnboarded,
   }) async {
+    print('DEBUG: updateUserProfile called, _authToken = $_authToken');
     final response = await http.put(
       Uri.parse('$baseUrl/user/profile'),
       headers: _headers,
