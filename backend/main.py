@@ -132,6 +132,8 @@ def update_profile():
     updated_user = db.update_user_profile(
         user.id,
         location=data.get('location'),
+        latitude=data.get('latitude'),
+        longitude=data.get('longitude'),
         monthly_income=data.get('monthlyIncome'),
         budget_goal=data.get('budgetGoal'),
         is_onboarded=data.get('isOnboarded'),

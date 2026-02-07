@@ -34,6 +34,7 @@ def get_engine():
     # psycopg3 driver
     url = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"
     # echo=True 可以看到 ORM 產生的 SQL（debug 用）
+    print(url)
     return create_engine(url, echo=False)
 
 
@@ -65,6 +66,8 @@ class User(SQLModel, table=True):
     username: str = Field(unique=True, index=True)
     password_hash: str
     location: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     monthly_income: Optional[float] = None
     budget_goal: Optional[float] = None
     is_onboarded: bool = Field(default=False)
@@ -368,6 +371,8 @@ def update_user_profile(
     user_id: str,
     *,
     location: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
     monthly_income: Optional[float] = None,
     budget_goal: Optional[float] = None,
     is_onboarded: Optional[bool] = None,
@@ -379,6 +384,10 @@ def update_user_profile(
 
         if location is not None:
             u.location = location
+        if latitude is not None:
+            u.latitude = latitude
+        if longitude is not None:
+            u.longitude = longitude
         if monthly_income is not None:
             u.monthly_income = float(monthly_income)
         if budget_goal is not None:
