@@ -466,7 +466,7 @@ class ApiClient {
   }
 
   /// Get daily budget compliance status for calendar
-  Future<List<Map<String, dynamic>>> getDailyStatus({int days = 30, DateTime? end}) async {
+  Future<List<Map<String, dynamic>>> getDailyStatus({int days = 30, DateTime? end, String? today}) async {
     var uri = Uri.parse('$baseUrl/stats/daily-status');
     
     final params = <String, String>{
@@ -475,6 +475,10 @@ class ApiClient {
     
     if (end != null) {
       params['end'] = end.toIso8601String();
+    }
+    
+    if (today != null) {
+      params['today'] = today;
     }
     
     uri = uri.replace(queryParameters: params);

@@ -597,30 +597,51 @@ def get_daily_budget_status(
     user_id: str,
     start_date: datetime,
     end_date: datetime,
+    today: Optional[datetime] = None,
 ) -> list[dict[str, Any]]:
     """
     Get budget compliance status for each day in the date range.
     Returns list of {date, compliant, hasData} for calendar visualization.
-    Only includes days from when the user joined the app onwards.
+    Only includes days from when the user joined the app onwards and up to today.
+    
+    Args:
+        user_id: The user's ID
+        start_date: Start of date range
+        end_date: End of date range (will be clamped to today)
+        today: Client's local today date as string 'YYYY-MM-DD' or datetime
+               If None, uses utc_now() which may cause timezone issues
     """
     start_date = ensure_tz(start_date).replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = ensure_tz(end_date).replace(hour=0, minute=0, second=0, microsecond=0)
-    today = ensure_tz(utc_now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Parse today - can be a string 'YYYY-MM-DD' or datetime
+    if today is None:
+        today_dt = ensure_tz(utc_now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    elif isinstance(today, str):
+        # Parse YYYY-MM-DD string as naive datetime at midnight, then add UTC timezone
+        today_dt = datetime.fromisoformat(today)
+        today_dt = ensure_tz(today_dt).replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        today_dt = ensure_tz(today).replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Get user's join date
     user = db.get_user_by_id(user_id)
     if user is None:
         return []
     
-    user_join_date = ensure_tz(user.created_at).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Extract just the DATE part of when user joined
+    # Since created_at is in UTC, we subtract a day to account for timezone offset
+    # (user joining at 2/7 evening local = 2/8 early UTC, so we want 2/7)
+    user_created_utc = ensure_tz(user.created_at)
+    user_join_date = user_created_utc.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     
     # Don't include days before user joined
     if start_date < user_join_date:
         start_date = user_join_date
     
     # Don't include days after today
-    if end_date > today:
-        end_date = today
+    if end_date > today_dt:
+        end_date = today_dt
     
     result = []
     current_date = start_date

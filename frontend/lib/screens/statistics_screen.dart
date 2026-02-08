@@ -528,7 +528,11 @@ class _BudgetCalendarState extends State<_BudgetCalendar> {
       final lastDay = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
       final days = lastDay.day;
       
-      final data = await _apiClient.getDailyStatus(days: days, end: lastDay);
+      // Get today's date as simple YYYY-MM-DD string (client's local date)
+      final todayLocal = DateTime.now();
+      final todayString = '${todayLocal.year}-${todayLocal.month.toString().padLeft(2, '0')}-${todayLocal.day.toString().padLeft(2, '0')}';
+      
+      final data = await _apiClient.getDailyStatus(days: days, end: lastDay, today: todayString);
       
       // Convert list to map for easy lookup by date
       final statusMap = <String, Map<String, dynamic>>{};

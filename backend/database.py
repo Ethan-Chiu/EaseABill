@@ -569,12 +569,12 @@ def seed_database() -> None:
             id="user1",
             username="ethan",
             password_hash=hash_password("password"),
-            location="San Francisco, USA",
-            latitude=37.7749,
-            longitude=-122.4194,
-            monthly_income=5000.0,
-            budget_goal=1500.0,
-            is_onboarded=True,
+            # location="San Francisco, USA",
+            # latitude=37.7749,
+            # longitude=-122.4194,
+            # monthly_income=5000.0,
+            # budget_goal=1500.0,
+            is_onboarded=False,
         )
         
         user2 = User(
@@ -652,7 +652,7 @@ def seed_database() -> None:
             Expense(
                 title="Gym Membership",
                 amount=50.00,
-                category="Health & Fitness",
+                category="Lifestyle",
                 date=now - timedelta(days=7),
                 description="Monthly gym",
                 user_id="user1",
@@ -660,7 +660,7 @@ def seed_database() -> None:
             Expense(
                 title="Online Shopping",
                 amount=75.00,
-                category="Shopping",
+                category="Shopping / Personal",
                 date=now - timedelta(days=4),
                 description="Clothes and accessories",
                 user_id="user1",
@@ -677,31 +677,31 @@ def seed_database() -> None:
         month_end = (month_start + timedelta(days=31)).replace(day=1) - timedelta(seconds=1)
 
         # Split user1's budget goal into category budgets
-        total_budget = user1.budget_goal  # 1500.0
-        budget_proportions = {
-            "Food & Dining": 0.30,      # 30% = $450
-            "Grocery": 0.20,             # 20% = $300
-            "Transportation": 0.20,      # 20% = $300
-            "Shopping / Personal": 0.15, # 15% = $225
-            "Lifestyle": 0.15,           # 15% = $225
-        }
+        # total_budget = user1.budget_goal  # 1500.0
+        # budget_proportions = {
+        #     "Food & Dining": 0.30,      # 30% = $450
+        #     "Grocery": 0.20,             # 20% = $300
+        #     "Transportation": 0.20,      # 20% = $300
+        #     "Shopping / Personal": 0.15, # 15% = $225
+        #     "Lifestyle": 0.15,           # 15% = $225
+        # }
         
-        budgets = []
-        for category, proportion in budget_proportions.items():
-            budgets.append(Budget(
-                category=category,
-                limit=total_budget * proportion,
-                period="monthly",
-                start_date=month_start,
-                end_date=month_end,
-                user_id="user1",
-            ))
+        # budgets = []
+        # for category, proportion in budget_proportions.items():
+        #     budgets.append(Budget(
+        #         category=category,
+        #         limit=total_budget * proportion,
+        #         period="monthly",
+        #         start_date=month_start,
+        #         end_date=month_end,
+        #         user_id="user1",
+        #     ))
 
-        for budget in budgets:
-            session.add(budget)
+        # for budget in budgets:
+        #     session.add(budget)
         
         session.commit()
 
         print("✅ Database seeded successfully!")
-        print(f"   Created 2 users, 6 expenses, {len(budgets)} budgets")
+        # print(f"   Created 2 users, 6 expenses, {len(budgets)} budgets")
 

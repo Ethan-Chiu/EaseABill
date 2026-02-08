@@ -552,6 +552,7 @@ def get_daily_status():
     # Get date range from query params (default to last 30 days)
     end_str = request.args.get("end")
     days = int(request.args.get("days", "30"))
+    today_str = request.args.get("today")  # Client's local today date
     
     if end_str:
         try:
@@ -563,10 +564,19 @@ def get_daily_status():
     
     start_date = end_date - timedelta(days=days)
     
+    # Parse today from client if provided
+    today = None
+    if today_str:
+        try:
+            today = datetime.fromisoformat(today_str.replace('Z', '+00:00'))
+        except ValueError:
+            pass  # Will default to None, backend will use UTC
+    
     data = fh.get_daily_budget_status(
         user_id=user.id,
         start_date=start_date,
         end_date=end_date,
+        today=today,
     )
     return jsonify(data), 200
 
